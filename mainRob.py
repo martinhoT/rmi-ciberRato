@@ -1,4 +1,5 @@
 
+from lib2to3.pgen2.token import LEFTSHIFT
 import sys
 from croblink import *
 from math import *
@@ -10,6 +11,7 @@ CELLCOLS=14
 class MyRob(CRobLinkAngs):
     def __init__(self, rob_name, rob_id, angles, host):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
+        self.history = []
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -62,21 +64,23 @@ class MyRob(CRobLinkAngs):
                     self.setReturningLed(False)
                 self.wander()
             
+    '''
+        Line sensor:
+        o _
+        o _|-> 0.08
+        o
+        o
+        o
+        o
+        o
+        Line width: 0.2
+        Distance to robot's center: 0.438
+        Max speed: 0.15
+    '''
 
+    '''
+    # Score: 100 points
     def wander(self):
-        '''
-Line sensor:
-o _
-o _|-> 0.08
-o
-o
-o
-o
-o
-Line width: 0.2
-Distance to robot's center: 0.438
-Max speed: 0.15
-        '''
         print('Line sensors:', self.measures.lineSensor)
 
         if self.measures.lineSensor[-1] == '1':
@@ -92,6 +96,81 @@ Max speed: 0.15
             print('Rotate slowly left')
             self.driveMotors(0.0, 0.1)
         else:
+            print('Go')
+            self.driveMotors(0.1, 0.1)
+
+    # Score: Robot crashes into a wall
+    def wander(self):
+        
+        # print('Line sensors:', self.measures.lineSensor)
+
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
+
+        # Check history
+        if self.history:
+            action = self.history.pop(0)
+            print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
+            self.driveMotors(action[0], action[1])
+        
+        # Check line sensors
+        # High detour
+        elif left >= 2 or right >= 2:
+
+            # Small difference
+            if left - right == 1:
+                print('Rotate slightly to the left')
+                self.driveMotors(-0.01, +0.01)
+            if left - right == -1:
+                print('Rotate slightly to the right')
+                self.driveMotors(+0.01, -0.01)
+
+            # High difference
+            if left - right > 1:
+                print('Rotate left')
+                self.driveMotors(-0.05, +0.05)
+                self.history = [(-0.1, +0.1) for _ in range(right - left-1)]
+            elif left - right < -1:
+                print('Rotate right')
+                self.driveMotors(+0.05, -0.05)
+                self.history = [(+0.1, -0.1) for _ in range(abs(right - left)-1)]
+
+            # No difference
+            else: 
+                print('Go')
+                self.driveMotors(0.1, 0.1)
+        
+        # Small detour
+        else: 
+            print('Go')
+            self.driveMotors(0.1, 0.1)
+        '''
+
+    # Score: (At least) 100 points
+    def wander(self):
+
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
+
+        print(self.measures.lineSensor)
+
+        # Check history
+        if self.history:
+            action = self.history.pop(0)
+            print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
+            self.driveMotors(action[0], action[1])
+
+        elif left - right > 0:
+            print('Rotate left')
+            self.driveMotors(-0.03, +0.03)
+            # self.history = [(-0.1, +0.1) for _ in range((right - left)-1)]
+
+        elif left - right < 0:
+            print('Rotate right')
+            self.driveMotors(+0.03, -0.03)
+            # self.history = [(+0.1, -0.1) for _ in range(abs(right - left)-1)]
+
+        else: 
             print('Go')
             self.driveMotors(0.1, 0.1)
 
