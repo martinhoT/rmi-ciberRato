@@ -9,9 +9,12 @@ CELLROWS=7
 CELLCOLS=14
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, rob_name, rob_id, angles, host):
+    def __init__(self, rob_name, rob_id, angles, host, lineSensorMemoryN=7):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
+        self.memory = {
+            'lineSensor': [ ['0']*7 ]*lineSensorMemoryN
+        }
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -144,7 +147,59 @@ class MyRob(CRobLinkAngs):
         else: 
             print('Go')
             self.driveMotors(0.1, 0.1)
-        '''
+    '''
+
+    # Score: (At least) 100 points
+    def wanderByLineSensorMemory(self):
+        """
+Wander using the last X `lineSensor` values. These values are only used to calculate the desired turn speed.
+
+Example for the last 3 `lineSensor` values, from most recent to least recent:
+```
+[
+    [0,  0,  1,  1,  1,  1,  1],
+    [0,  0,  1,  1,  1,  0,  0],
+    [0,  0,  1,  1,  1,  0,  0],
+]
+```
+This 3x7 matrix is converted to a single aggregate list, by treating each column as a binary number.
+This results in the most recent values having greater impact in the current turn speed than older ones.
+
+The aggregate list is used to determine the desired turn speed to the left and to the right.
+        """
+
+        self.memory['lineSensor'] = [self.measures.lineSensor] + self.memory['lineSensor'][:-1]
+        
+        lineSensorAgg = [int(''.join(list(bins)), 2) for bins in zip(*self.memory['lineSensor'])]
+
+        if not any(lineSensorAgg):
+            print('OFF TRACK')
+            return
+
+        print('Line sensors:', self.measures.lineSensor, 'Agg:', lineSensorAgg, 'Ground:', self.measures.ground)
+
+        # Ideally, the turn scales are < 1.0
+        maxTurnScale = 3 * (2**7-1)
+        leftTurnScale = sum(lineSensorAgg[:3][::-1]) / maxTurnScale
+        rightTurnScale = sum(lineSensorAgg[4:]) / maxTurnScale
+        
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
+
+        # In a turn, the inner motors have a squared turn speed so that sharper turns 
+        # are only applied when the turnScale is large enough (close to 1.0)
+        if left > right:
+            print('Rotate left', leftTurnScale)
+            self.driveMotors(-0.1 * leftTurnScale**2, +0.15 * leftTurnScale)
+
+        elif left < right:
+            print('Rotate right', rightTurnScale)
+            self.driveMotors(+0.15 * rightTurnScale, -0.1 * rightTurnScale**2)
+
+        else:
+            print('Go')
+            action = self.safeguard()
+            self.driveMotors(action[0], action[1])
 
     # Score: (At least) 100 points
     def wander(self):
