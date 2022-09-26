@@ -180,7 +180,6 @@ The aggregate list is used to determine the desired turn speed to the left and t
             action = self.safeguard()
             self.driveMotors(action[0], action[1])
 
-    """
     count = 0
     def spin(self):
 
@@ -188,7 +187,6 @@ The aggregate list is used to determine the desired turn speed to the left and t
         self.driveMotors(0.15, -0.15)
         self.count += 1
         print("Count:", self.count)
-    """
 
     def wanderWithRotationHistory(self):
 
