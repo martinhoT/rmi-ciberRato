@@ -147,12 +147,14 @@ The aggregate list is used to determine the desired turn speed to the left and t
         # In a turn, the inner motors have a squared turn speed so that sharper turns 
         # are only applied when the turnScale is large enough (close to 1.0)
         if left > right:
+            sharpTurnScale = leftTurnScale**2 if leftTurnScale > 0.5 else 0.0
             print('Rotate left', leftTurnScale)
-            self.driveMotors(-0.1 * leftTurnScale**2, +0.15 * leftTurnScale)
+            self.driveMotors(-0.1 * sharpTurnScale, +0.15 * leftTurnScale)
 
         elif left < right:
+            sharpTurnScale = rightTurnScale**2 if rightTurnScale > 0.5 else 0.0
             print('Rotate right', rightTurnScale)
-            self.driveMotors(+0.15 * rightTurnScale, -0.1 * rightTurnScale**2)
+            self.driveMotors(+0.15 * rightTurnScale, -0.1 * sharpTurnScale)
 
         else:
             print('Go')
