@@ -24,13 +24,17 @@ if __name__ == '__main__':
 
     inL, inR = args.inL, args.inR
 
+    counter = 0
     theta = 0.0
     outL = 0.0
     outR = 0.0
     x = 0.0
     y = 0.0
     while theta < pi/2:
+        counter += 1
         x, y, theta, outL, outR = driveMotors(inL, inR, outL, outR, theta, x, y)
         print(theta)
+    counter -= 1
 
     print('x:', x, 'y:', y)
+    print("Counter:", counter)

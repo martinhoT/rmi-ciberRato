@@ -164,6 +164,34 @@ The aggregate list is used to determine the desired turn speed to the left and t
 
         left = self.measures.lineSensor[:3].count("1")
         right = self.measures.lineSensor[4:].count("1")
+        
+        if left - right > 0:
+            print('Rotate left')
+            self.driveMotors(-0.03, +0.03)
+
+        elif left - right < 0:
+            print('Rotate right')
+            self.driveMotors(+0.03, -0.03)
+
+        else: 
+            print('Go')
+            action = self.safeguard()
+            self.driveMotors(action[0], action[1])
+
+    """
+    count = 0
+    def spin(self):
+
+        print('Rotate right')
+        self.driveMotors(0.15, -0.15)
+        self.count += 1
+        print("Count:", self.count)
+    """
+
+    def wanderWithRotationHistory(self):
+
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
 
         print(self.measures.lineSensor)
 
@@ -173,21 +201,20 @@ The aggregate list is used to determine the desired turn speed to the left and t
             print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
             self.driveMotors(action[0], action[1])
 
-        elif left - right > 0:
-            print('Rotate left')
-            self.driveMotors(-0.03, +0.03)
-            # self.history = [(-0.1, +0.1) for _ in range((right - left)-1)]
-
-        elif left - right < 0:
+        elif right == 3:
             print('Rotate right')
-            self.driveMotors(+0.03, -0.03)
-            # self.history = [(+0.1, -0.1) for _ in range(abs(right - left)-1)]
+            self.driveMotors(0.15, 0.15)
+            self.history = [(0.15, 0.15)] + [(0.15, -0.15)]*5 + [(0.15, 0.15)]
+        
+        elif left == 3:
+            print('Rotate left')
+            self.driveMotors(0.15, 0.15)
+            self.history = [(0.15, 0.15)] + [(-0.15, 0.15)]*5 + [(0.15, 0.15)]
 
         else: 
-            print('Go')
-            action = self.safeguard()
-            self.driveMotors(action[0], action[1])
+            self.wanderBase()
         
+
     def safeguard(self):
         center_id = 0
         left_id = 1
@@ -210,6 +237,8 @@ The aggregate list is used to determine the desired turn speed to the left and t
         'basic': wanderBasic,
         'byActionHistory': wanderByActionHistory,
         'byLineSensorMemory': wanderByLineSensorMemory,
+        'withRotationHistory': wanderWithRotationHistory,
+        'spin': spin
     }
 
     def run(self):
