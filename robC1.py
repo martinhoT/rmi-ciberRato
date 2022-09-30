@@ -191,6 +191,53 @@ class MyRob(CRobLinkAngs):
             action = self.safeguard()
             self.driveMotors(action[0], action[1])
 
+    # Score: 5320 but robot gets temporarily stuck on backtracking (backtrack = 0.12)
+    # Score: 5550, robot works perfectly (backtrack = 0.15)
+    def wanderWithBacktracking(self):
+
+        # self.history = 0 -> Straight
+        # self.history = 1 -> Left
+        # self.history = 2 -> Right
+        
+        print(self.measures.lineSensor)
+        n_active = self.measures.lineSensor.count("1")
+
+        # Robot is off track
+        if (n_active == 0):
+            
+            print('Off track - Backtracking...')
+
+            backtrack = 0.15
+            last_move = self.history.pop(0)
+            if last_move == 0:
+                self.driveMotors(-backtrack, -backtrack)
+            elif last_move == 1:
+                self.driveMotors(backtrack, -backtrack)
+            else: 
+                self.driveMotors(-backtrack, backtrack)
+            
+            return
+
+        # Robot is on track
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
+        
+        if left - right > 1:
+            print('Rotate left')
+            self.driveMotors(-0.15, +0.15)
+            self.history.append(1)
+
+        elif left - right < -1:
+            print('Rotate right')
+            self.driveMotors(+0.15, -0.15)
+            self.history.append(2)
+
+        else: 
+            print('Go')
+            action = self.safeguard()
+            self.driveMotors(action[0], action[1])
+            self.history.append(0)
+
     def safeguard(self):
         center_id = 0
         left_id = 1
@@ -206,7 +253,7 @@ class MyRob(CRobLinkAngs):
             return (0.1, 0.0)
         elif self.measures.irSensor[right_id]> 2.7:
             return (0.0, 0.1)
-        return (0.1, 0.1)
+        return (0.15, 0.15) # Max speed
 
     _wanderApproaches = {
         'base': wanderBase,
@@ -214,6 +261,7 @@ class MyRob(CRobLinkAngs):
         'byLineSensorMemory': wanderByLineSensorMemory,
         'withRotationHistory': wanderWithRotationHistory,
         'baseImproved': wanderBaseImproved,
+        'withBacktracking': wanderWithBacktracking
     }
 
     def run(self):
