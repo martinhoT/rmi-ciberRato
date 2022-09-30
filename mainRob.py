@@ -9,6 +9,22 @@ import xml.etree.ElementTree as ET
 CELLROWS=7
 CELLCOLS=14
 
+'''
+    Line sensor:
+    o _
+    o _|-> 0.08
+    o
+    o
+    o
+    o
+    o
+    Line width: 0.2
+    Distance to robot's center: 0.438
+    Diameter: 0.5
+    Cell width: 1.0
+    Max speed: 0.15
+'''
+
 class MyRob(CRobLinkAngs):
     def __init__(self, rob_name, rob_id, angles, host, approach='base', lineSensorMemoryN=7):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
@@ -27,22 +43,6 @@ class MyRob(CRobLinkAngs):
     def printMap(self):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
-            
-    '''
-        Line sensor:
-        o _
-        o _|-> 0.08
-        o
-        o
-        o
-        o
-        o
-        Line width: 0.2
-        Distance to robot's center: 0.438
-        Diameter: 0.5
-        Cell width: 1.0
-        Max speed: 0.15
-    '''
 
     # Score: 100 points
     def wanderBasic(self):
@@ -64,69 +64,23 @@ class MyRob(CRobLinkAngs):
             print('Go')
             self.driveMotors(0.1, 0.1)
 
-    # Score: Robot crashes into a wall
-    def wanderByActionHistory(self):
-        
-        # print('Line sensors:', self.measures.lineSensor)
-
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
-
-        # Check history
-        if self.history:
-            action = self.history.pop(0)
-            print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
-            self.driveMotors(action[0], action[1])
-        
-        # Check line sensors
-        # High detour
-        elif left >= 2 or right >= 2:
-
-            # Small difference
-            if left - right == 1:
-                print('Rotate slightly to the left')
-                self.driveMotors(-0.01, +0.01)
-            if left - right == -1:
-                print('Rotate slightly to the right')
-                self.driveMotors(+0.01, -0.01)
-
-            # High difference
-            if left - right > 1:
-                print('Rotate left')
-                self.driveMotors(-0.05, +0.05)
-                self.history = [(-0.1, +0.1) for _ in range(right - left-1)]
-            elif left - right < -1:
-                print('Rotate right')
-                self.driveMotors(+0.05, -0.05)
-                self.history = [(+0.1, -0.1) for _ in range(abs(right - left)-1)]
-
-            # No difference
-            else: 
-                print('Go')
-                self.driveMotors(0.1, 0.1)
-        
-        # Small detour
-        else: 
-            print('Go')
-            self.driveMotors(0.1, 0.1)
-
     # Score: ~3570
     def wanderByLineSensorMemory(self):
         """
-Wander using the last X `lineSensor` values. These values are only used to calculate the desired turn speed.
+        Wander using the last X `lineSensor` values. These values are only used to calculate the desired turn speed.
 
-Example for the last 3 `lineSensor` values, from most recent to least recent:
-```
-[
-    [0,  0,  1,  1,  1,  1,  1],
-    [0,  0,  1,  1,  1,  0,  0],
-    [0,  0,  1,  1,  1,  0,  0],
-]
-```
-This 3x7 matrix is converted to a single aggregate list, by treating each column as a binary number.
-This results in the most recent values having greater impact in the current turn speed than older ones.
+        Example for the last 3 `lineSensor` values, from most recent to least recent:
+        ```
+        [
+            [0,  0,  1,  1,  1,  1,  1],
+            [0,  0,  1,  1,  1,  0,  0],
+            [0,  0,  1,  1,  1,  0,  0],
+        ]
+        ```
+        This 3x7 matrix is converted to a single aggregate list, by treating each column as a binary number.
+        This results in the most recent values having greater impact in the current turn speed than older ones.
 
-The aggregate list is used to determine the desired turn speed to the left and to the right.
+        The aggregate list is used to determine the desired turn speed to the left and to the right.
         """
 
         if any(ls == '1' for ls in self.measures.lineSensor):
@@ -177,14 +131,6 @@ The aggregate list is used to determine the desired turn speed to the left and t
             action = self.safeguard()
             self.driveMotors(action[0], action[1])
 
-    count = 0
-    def spin(self):
-
-        print('Rotate right')
-        self.driveMotors(0.15, -0.15)
-        self.count += 1
-        print("Count:", self.count)
-
     def wanderWithRotationHistory(self):
 
         left = self.measures.lineSensor[:3].count("1")
@@ -211,6 +157,39 @@ The aggregate list is used to determine the desired turn speed to the left and t
         else: 
             self.wanderBase()
         
+    # Score: 3720 with self.driveMotors(-0.05, +0.05)
+    # Score: 3690 with self.driveMotors(-0.03, +0.03)
+    # Score: 3700 with self.driveMotors(-0.1, +0.1)
+    def wanderBaseImproved(self):
+
+        print(self.measures.lineSensor)
+
+        center = self.measures.lineSensor[2:5].count("1")
+        left = self.measures.lineSensor[:3].count("1")
+        right = self.measures.lineSensor[4:].count("1")
+
+        if left - right > 1:
+            print('Rotate left')
+            self.driveMotors(-0.15, +0.15)
+
+        # If centered, ignore small deviations to the left
+        elif left - right > 0 and center < 3:
+            print('Rotate slightly to the left')
+            self.driveMotors(-0.05, +0.05)
+
+        elif left - right < -1:
+            print('Rotate right')
+            self.driveMotors(+0.15, -0.15)
+
+        # If centered, ignore small deviations to the right
+        elif left - right < 0 and center < 3:
+            print('Rotate slightly to the right')
+            self.driveMotors(+0.05, -0.05)
+
+        else: 
+            print('Go')
+            action = self.safeguard()
+            self.driveMotors(action[0], action[1])
 
     def safeguard(self):
         center_id = 0
@@ -232,10 +211,9 @@ The aggregate list is used to determine the desired turn speed to the left and t
     _wanderApproaches = {
         'base': wanderBase,
         'basic': wanderBasic,
-        'byActionHistory': wanderByActionHistory,
         'byLineSensorMemory': wanderByLineSensorMemory,
         'withRotationHistory': wanderWithRotationHistory,
-        'spin': spin
+        'baseImproved': wanderBaseImproved,
     }
 
     def run(self):
