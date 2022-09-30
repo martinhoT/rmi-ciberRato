@@ -33,6 +33,7 @@ class MyRob(CRobLinkAngs):
     def __init__(self, rob_name, rob_id, angles, host):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
+        self.map = {}
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -89,6 +90,20 @@ class MyRob(CRobLinkAngs):
             self.driveMotors(action[0], action[1])
             self.history.append(0)
 
+            print("Compass:", self.measures.compass)
+            print("Orientation:", self.getOrientation())
+            
+            # Update map
+            x = round(self.measures.x)
+            y = round(self.measures.y)
+            if (x,y) not in self.map:
+                self.map[(x,y)] = self.getOrientation()
+                print(self.map)
+
+        # Move one line segment <=> Move 2 cells
+        print("X:", self.measures.x)
+        print("Y:", self.measures.y)
+        
     def safeguard(self):
         center_id = 0
         left_id = 1
@@ -105,6 +120,17 @@ class MyRob(CRobLinkAngs):
         elif self.measures.irSensor[right_id]> 2.7:
             return (0.0, 0.1)
         return (0.15, 0.15) # Max speed
+
+    # Obtain orientation of robot in the map
+    def getOrientation(self):
+        if self.measures.compass >= 45 and self.measures.compass <= 135:
+            return 'N'
+        elif self.measures.compass < 45 and self.measures.compass > -45:
+            return 'E'
+        elif self.measures.compass <= -45 and self.measures.compass >= -135:
+            return 'S'
+        else:
+            return 'W'
 
     def run(self):
         if self.status != 0:
@@ -181,7 +207,6 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-approach = 'base'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:
