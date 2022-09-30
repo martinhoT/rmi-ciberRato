@@ -23,6 +23,10 @@ CELLCOLS=14
     Diameter: 0.5
     Cell width: 1.0
     Max speed: 0.15
+
+    GPS:
+    - no noise
+    - random starting position
 '''
 
 class MyRob(CRobLinkAngs):
