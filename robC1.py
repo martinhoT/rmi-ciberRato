@@ -208,20 +208,20 @@ class MyRob(CRobLinkAngs):
             print('Off track - Backtracking...')
 
             backtrack = 0.15
-            last_move = self.history.pop(0)
+            last_move = self.history[-1]
             if last_move == 0:
                 self.driveMotors(-backtrack, -backtrack)
             elif last_move == 1:
-                self.driveMotors(backtrack, -backtrack)
-            else: 
                 self.driveMotors(-backtrack, backtrack)
+            else: 
+                self.driveMotors(backtrack, -backtrack)
             
             return
 
         # Robot is on track
         left = self.measures.lineSensor[:3].count("1")
         right = self.measures.lineSensor[4:].count("1")
-        
+
         if left - right > 1:
             print('Rotate left')
             self.driveMotors(-0.15, +0.15)
@@ -339,7 +339,8 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-approach = 'base'
+# DEFAULT APPROACH
+approach = 'withBacktracking'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:
