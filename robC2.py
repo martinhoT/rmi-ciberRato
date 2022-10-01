@@ -70,6 +70,15 @@ class MyRob(CRobLinkAngs):
             
             return
 
+        orientation = self.getOrientation()
+        angle_to_track = self.measures.compass - \
+                 (90 if orientation == 'N'
+            else -90 if orientation == 'S'
+            else 180 if self.measures.compass > 135
+            else -180 if self.measures.compass < -135
+            else 0)
+        print('Angle to track:', angle_to_track)
+
         # Robot is on track
         left = self.measures.lineSensor[:3].count("1")
         right = self.measures.lineSensor[4:].count("1")
