@@ -160,8 +160,6 @@ for i in range(1, len(sys.argv),2):
         rob_name = sys.argv[i + 1]
     elif (sys.argv[i] == "--map" or sys.argv[i] == "-m") and i != len(sys.argv) - 1:
         mapc = Map(sys.argv[i + 1])
-    elif (sys.argv[i] == "--approach" or sys.argv[i] == "-a") and i != len(sys.argv) - 1:
-        approach = sys.argv[i + 1]
     else:
         print("Unkown argument", sys.argv[i])
         quit()

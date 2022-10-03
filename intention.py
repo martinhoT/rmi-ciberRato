@@ -1,4 +1,4 @@
-from typing import Tuple, Union, TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from robC1 import MyRob as RobC1
     from robC2 import MyRob as RobC2
@@ -6,19 +6,13 @@ if TYPE_CHECKING:
 
 class Intention:
 
-    def __init__(self):
-        pass
-
-    def act(self, robot: Union['RobC1', 'RobC2']) -> Tuple[float, float]:
+    def act(self, robot: Union['RobC1', 'RobC2']):
         raise NotImplementedError()
 
 
 class Wander(Intention):
 
-    def __init__(self):
-        pass
-
-    def act(self, robot: 'RobC2') -> Tuple[float, float]:
+    def act(self, robot: 'RobC2'):
 
         # robot.history = 0 -> Straight
         # robot.history = 1 -> Left
@@ -55,6 +49,13 @@ class Wander(Intention):
         # Robot is on track
         left = robot.measures.lineSensor[:3].count("1")
         right = robot.measures.lineSensor[4:].count("1")
+
+        leftTurn = left == 3
+        rightTurn = right == 3
+
+        if leftTurn or rightTurn:
+            robot.intention = CheckIntersectionForward()
+            robot.driveMotors(0.1, 0.1)
         
         if left - right > 1:
             print('Rotate left')
@@ -85,3 +86,17 @@ class Wander(Intention):
         # Move one line segment <=> Move 2 cells
         print("X:", robot.measures.x)
         print("Y:", robot.measures.y)
+
+class CheckIntersectionForward(Intention):
+
+    def act(self, robot: 'RobC2'):
+        robot.driveMotors(0.1, 0.1)
+        
+        if all(ls == '0' for ls in robot.measures.lineSensor):
+            robot.intention = CheckIntersectionBacktrack()
+
+class CheckIntersectionBacktrack(Intention):
+
+    def act(self, robot: 'RobC2'):
+        robot.driveMotors(-0.1, -0.1)
+
