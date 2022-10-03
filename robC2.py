@@ -6,6 +6,8 @@ from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
 
+from intention import Wander
+
 CELLROWS=7
 CELLCOLS=14
 
@@ -34,6 +36,7 @@ class MyRob(CRobLinkAngs):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
         self.map = {}
+        self.intention = Wander()
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -44,75 +47,6 @@ class MyRob(CRobLinkAngs):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
 
-    # Score: 5550
-    def wander(self):
-
-        # self.history = 0 -> Straight
-        # self.history = 1 -> Left
-        # self.history = 2 -> Right
-        
-        print(self.measures.lineSensor)
-        n_active = self.measures.lineSensor.count("1")
-
-        # Robot is off track
-        if (n_active == 0):
-            
-            print('Off track - Backtracking...')
-
-            backtrack = 0.15
-            last_move = self.history.pop(0)
-            if last_move == 0:
-                self.driveMotors(-backtrack, -backtrack)
-            elif last_move == 1:
-                self.driveMotors(backtrack, -backtrack)
-            else: 
-                self.driveMotors(-backtrack, backtrack)
-            
-            return
-
-        orientation = self.getOrientation()
-        angle_to_track = self.measures.compass - \
-                 (90 if orientation == 'N'
-            else -90 if orientation == 'S'
-            else 180 if self.measures.compass > 135
-            else -180 if self.measures.compass < -135
-            else 0)
-        print('Angle to track:', angle_to_track)
-
-        # Robot is on track
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
-        
-        if left - right > 1:
-            print('Rotate left')
-            self.driveMotors(-0.15, +0.15)
-            self.history.append(1)
-
-        elif left - right < -1:
-            print('Rotate right')
-            self.driveMotors(+0.15, -0.15)
-            self.history.append(2)
-
-        else: 
-            print('Go')
-            action = self.safeguard()
-            self.driveMotors(action[0], action[1])
-            self.history.append(0)
-
-            print("Compass:", self.measures.compass)
-            print("Orientation:", self.getOrientation())
-            
-            # Update map
-            x = round(self.measures.x)
-            y = round(self.measures.y)
-            if (x,y) not in self.map:
-                self.map[(x,y)] = self.getOrientation()
-                print(self.map)
-
-        # Move one line segment <=> Move 2 cells
-        print("X:", self.measures.x)
-        print("Y:", self.measures.y)
-        
     def safeguard(self):
         center_id = 0
         left_id = 1
@@ -168,7 +102,7 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
-                self.wander()
+                self.intention.act(self)
             elif state=='wait':
                 self.setReturningLed(True)
                 if self.measures.visitingLed==True:
@@ -181,7 +115,7 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
-                self.wander()
+                self.intention.act(self)
 
 
 class Map():
