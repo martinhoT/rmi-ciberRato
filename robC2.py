@@ -7,6 +7,7 @@ from math import *
 import xml.etree.ElementTree as ET
 
 from intention import Wander
+from directions import Direction
 
 CELLROWS=7
 CELLCOLS=14
@@ -36,6 +37,7 @@ class MyRob(CRobLinkAngs):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
         self.map = {}
+        self.intersections = {}
         self.intention = Wander()
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].

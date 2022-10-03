@@ -140,7 +140,7 @@ class MyRob(CRobLinkAngs):
 
         # Check history
         if self.history:
-            action = self.history.pop(0)
+            action = self.history.pop()
             print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
             self.driveMotors(action[0], action[1])
 
