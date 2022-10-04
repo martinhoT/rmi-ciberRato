@@ -67,15 +67,15 @@ class MyRob(CRobLinkAngs):
         return (0.15, 0.15) # Max speed
 
     # Obtain orientation of robot in the map
-    def getOrientation(self):
+    def getDirection(self):
         if self.measures.compass >= 45 and self.measures.compass <= 135:
-            return 'N'
+            return Direction.N
         elif self.measures.compass < 45 and self.measures.compass > -45:
-            return 'E'
+            return Direction.E
         elif self.measures.compass <= -45 and self.measures.compass >= -135:
-            return 'S'
+            return Direction.S
         else:
-            return 'W'
+            return Direction.W
 
     def run(self):
         if self.status != 0:

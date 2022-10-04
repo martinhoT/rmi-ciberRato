@@ -1,21 +1,20 @@
-from turtle import pos
 from typing import Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from robC1 import MyRob as RobC1
     from robC2 import MyRob as RobC2
 
-from directions import Direction
+from directions import Direction, DIRECTIONS_ARRAY
 
 class Intention:
+
+    def __init__(self):
+        self.velocity = 0.8
 
     def act(self, robot: Union['RobC1', 'RobC2']):
         raise NotImplementedError()
 
 
 class Wander(Intention):
-
-    def __init__(self):
-        self.velocity = 0.8
 
     def act(self, robot: 'RobC2'):
 
@@ -42,10 +41,10 @@ class Wander(Intention):
             
             return
 
-        orientation = robot.getOrientation()
+        direction = robot.getDirection()
         angle_to_track = robot.measures.compass - \
-                 (90 if orientation == 'N'
-            else -90 if orientation == 'S'
+                 (90 if direction == Direction.N
+            else -90 if direction == Direction.S
             else  180 if robot.measures.compass > 135
             else -180 if robot.measures.compass < -135
             else 0)
@@ -61,18 +60,31 @@ class Wander(Intention):
         if leftTurn or rightTurn:
 
             # Obtain  position of robot in the map
-            position = (robot.measures.x, robot.measures.y)
+            x = round(robot.measures.x)
+            y = round(robot.measures.y)
+            position = (x, y)
 
             if position not in robot.intersections:
+
                 robot.intersections[position] = []
 
-            if leftTurn:
-                robot.intersections[position].append(Direction.LEFT)
-            if rightTurn:
-                robot.intersections[position].append(Direction.RIGHT) 
+                if leftTurn:
+                    robot.intersections[position].append(DIRECTIONS_ARRAY[(direction.value - 1) % 4])
+                if rightTurn:
+                    robot.intersections[position].append(DIRECTIONS_ARRAY[(direction.value + 1) % 4])
             
-            robot.intention = CheckIntersectionForward()
-            robot.driveMotors(0.1, 0.1)
+                robot.intention = CheckIntersectionForward()
+            
+                # robot.driveMotors(self.velocity, self.velocity)
+
+            else:
+                
+                if not robot.intersections[position]:
+                    # TODO: Input
+                    pass
+
+                else:
+                    robot.intention = TurnIntersection()
         
         if left - right > 1:
             print('Rotate left')
@@ -91,13 +103,13 @@ class Wander(Intention):
             robot.history.append(0)
 
             print("Compass:", robot.measures.compass)
-            print("Orientation:", robot.getOrientation())
+            print("Direction:", robot.getDirection())
             
             # Update map
             x = round(robot.measures.x)
             y = round(robot.measures.y)
             if (x,y) not in robot.map:
-                robot.map[(x,y)] = robot.getOrientation()
+                robot.map[(x,y)] = robot.getDirection()
                 # print(robot.map)
 
         # Move one line segment <=> Move 2 cells
@@ -107,20 +119,24 @@ class Wander(Intention):
 class CheckIntersectionForward(Intention):
 
     def act(self, robot: 'RobC2'):
-        robot.driveMotors(0.1, 0.1)
+        robot.driveMotors(self.velocity, self.velocity)
         
         if all(ls == '0' for ls in robot.measures.lineSensor):
             robot.intention = CheckIntersectionBacktrack()
 
         # Obtain  position of robot in the map
-        position = (robot.measures.x, robot.measures.y)
-        robot.intersections[position].append(Direction.FRONT)
+        x = round(robot.measures.x)
+        y = round(robot.measures.y)
+        position = (x, y)
+        direction = robot.getDirection()
+
+        robot.intersections[position].append(direction)
         robot.intention = CheckIntersectionBacktrack()
 
 class CheckIntersectionBacktrack(Intention):
 
     def act(self, robot: 'RobC2'):
-        robot.driveMotors(-0.1, -0.1)
+        robot.driveMotors(-self.velocity, -self.velocity)
         robot.intention = TurnIntersection()
 
 
@@ -128,21 +144,38 @@ class TurnIntersection(Intention):
 
     def act(self, robot: 'RobC2'):
         
-        position = (robot.measures.x, robot.measures.y)
-        for direction in robot.intersections[position]:
+        x = round(robot.measures.x)
+        y = round(robot.measures.y)
+        position = (x, y)
+        direction = robot.getDirection()
 
-            if direction == Direction.LEFT:
+        for available in robot.intersections[position]:
+
+            if (direction.value - 1) % 4 == available.value:
                 print("Rotate left")
-                robot.intersections[position].remove(direction)
-                # TODO: Rotate left
+                robot.intersections[position].remove(available)
+                robot.intention = Rotate(True, direction)
                 
-            elif direction == Direction.RIGHT:
+            elif (direction.value + 1) % 4 == available.value:
                 print("Rotate right")
-                robot.intersections[position].remove(direction)
-                # TODO: Rotate right
+                robot.intersections[position].remove(available)
+                robot.intention = Rotate(False, direction)
+
             else:
                 print("Go")
                 robot.intersections[position].remove(direction)
+                robot.driveMotors(self.velocity, self.velocity) # Leave intersection
+                robot.intention = Wander()
+        
 
-        robot.intention = Wander()
+class Rotate(Intention):
 
+    def __init__(self, left: bool, starting_direction: Direction):
+        super().__init__()
+        self.velocity = self.velocity * (-1)**int(left)
+        self.starting_direction = starting_direction
+    
+    def act(self, robot: 'RobC2'):
+        robot.driveMotors(-self.velocity, self.velocity)
+        if robot.getDirection() != self.starting_direction:
+            robot.intention = Wander()
