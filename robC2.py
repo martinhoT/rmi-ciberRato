@@ -49,23 +49,6 @@ class MyRob(CRobLinkAngs):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
 
-    def safeguard(self):
-        center_id = 0
-        left_id = 1
-        right_id = 2
-        back_id = 3
-
-        if self.measures.irSensor[center_id] > 5.0 \
-           or self.measures.irSensor[left_id]  > 5.0 \
-           or self.measures.irSensor[right_id] > 5.0 \
-           or self.measures.irSensor[back_id]  > 5.0:
-            return (-0.1, +0.1)
-        elif self.measures.irSensor[left_id]> 2.7:
-            return (0.1, 0.0)
-        elif self.measures.irSensor[right_id]> 2.7:
-            return (0.0, 0.1)
-        return (0.15, 0.15) # Max speed
-
     # Obtain orientation of robot in the map
     def getDirection(self):
         if self.measures.compass >= 45 and self.measures.compass <= 135:
