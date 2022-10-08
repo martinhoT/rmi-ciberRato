@@ -1,9 +1,11 @@
+import math
 from typing import Tuple, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from robC1 import MyRob as RobC1
     from robC2 import MyRob as RobC2
 
 from directions import Direction, DIRECTIONS_ARRAY
+
 
 class Intention:
 
@@ -30,17 +32,23 @@ class Intention:
         elif measures.irSensor[right_id]> 2.7:
             return (0.0, 0.1)
         return (0.15, 0.15) # Max speed
+    
+    def round_pos(self, coord: float):
+        return math.floor(coord + 0.5)
+    
+    def log_measured(self, robot: Union['RobC1', 'RobC2']):
+        print(f'{robot.measures.lineSensor} ({robot.measures.x}, {robot.measures.y}) -> ({self.round_pos(robot.measures.x)}, {self.round_pos(robot.measures.y)})')
 
 
 class Wander(Intention):
 
     def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
 
         # robot.history = 0 -> Straight
         # robot.history = 1 -> Left
         # robot.history = 2 -> Right
         
-        print(robot.measures.lineSensor)
         n_active = robot.measures.lineSensor.count("1")
 
         # Robot is off track
@@ -79,8 +87,8 @@ class Wander(Intention):
         if leftTurn or rightTurn:
 
             # Obtain  position of robot in the map
-            x = round(robot.measures.x)
-            y = round(robot.measures.y)
+            x = self.round_pos(robot.measures.x)
+            y = self.round_pos(robot.measures.y)
             position = (x, y)
 
             if position not in robot.intersections:
@@ -126,8 +134,8 @@ class Wander(Intention):
             # print("Direction:", robot.getDirection())
             
             # Update map
-            x = round(robot.measures.x)
-            y = round(robot.measures.y)
+            x = self.round_pos(robot.measures.x)
+            y = self.round_pos(robot.measures.y)
             if (x,y) not in robot.map:
                 robot.map[(x,y)] = robot.getDirection()
                 # print(robot.map)
@@ -144,6 +152,8 @@ class CheckIntersectionForward(Intention):
         self.test_steps = test_steps        
 
     def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
+
         robot.driveMotors(self.velocity, self.velocity)
         
         if all(ls == '0' for ls in robot.measures.lineSensor):
@@ -154,8 +164,8 @@ class CheckIntersectionForward(Intention):
         self.test_steps -= 1
 
         # Obtain  position of robot in the map
-        # x = round(robot.measures.x)
-        # y = round(robot.measures.y)
+        # x = self.round_pos(robot.measures.x)
+        # y = self.round_pos(robot.measures.y)
         # position = (x, y)
         # direction = robot.getDirection()
 
@@ -170,15 +180,17 @@ class CheckIntersectionForwardBacktrack(Intention):
         self.has_intersection_forward = has_intersection_forward
 
     def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
+
         robot.driveMotors(-self.velocity, -self.velocity)
 
-        x = round(robot.measures.x)
-        y = round(robot.measures.y)
+        x = self.round_pos(robot.measures.x)
+        y = self.round_pos(robot.measures.y)
         position = (x, y)
         direction = robot.getDirection()
 
         # Has gotten back on track (ideally)
-        if position in robot.intersections:
+        if all(ls == '1' for ls in robot.measures.lineSensor[:3]) or all(ls == '1' for ls in robot.measures.lineSensor[4:]):
             if self.has_intersection_forward:
                 robot.intersections[position].append(direction)
             robot.intention = TurnIntersection()
@@ -188,8 +200,8 @@ class TurnIntersection(Intention):
 
     # def act(self, robot: 'RobC2'):
         
-    #     x = round(robot.measures.x)
-    #     y = round(robot.measures.y)
+    #     x = self.round_pos(robot.measures.x)
+    #     y = self.round_pos(robot.measures.y)
     #     position = (x, y)
     #     direction = robot.getDirection()
 
@@ -212,6 +224,9 @@ class TurnIntersection(Intention):
     #             robot.intention = Wander()
 
     def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
+
+        # TODO: theoretic class 3: apply positive velocity instead of 0.0 to brake faster?
         robot.driveMotors(0.0, 0.0)
         way = input('Which way to go?')
         invalid_input = True
@@ -231,17 +246,25 @@ class Rotate(Intention):
 
     def __init__(self, left: bool, starting_direction: Direction):
         super().__init__()
-        self.velocity = self.velocity * (-1)**int(left)
+        self.left = left
+        # self.velocity = self.velocity * (-1)**int(left)
         self.starting_direction = starting_direction
     
     def act(self, robot: 'RobC2'):
-        robot.driveMotors(-self.velocity, self.velocity)
+        self.log_measured(robot)
+
+        # Rotating in-place like this may make the robot detect a full lineSensor, and erroneously think it's another intersection
+        # robot.driveMotors(self.velocity, -self.velocity)
+        # TODO: cleaner way?
+        robot.driveMotors(self.velocity if not self.left else 0.0, self.velocity if self.left else 0.0)
         if robot.getDirection() != self.starting_direction:
             robot.intention = Wander()
 
 class MoveForward(Intention):
 
     def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
+
         robot.driveMotors(self.velocity, self.velocity)
         if all(ls == '1' for ls in robot.measures.lineSensor[2:5]):
             robot.intention = Wander()
