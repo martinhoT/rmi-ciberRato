@@ -49,17 +49,6 @@ class MyRob(CRobLinkAngs):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
 
-    # Obtain orientation of robot in the map
-    def getDirection(self):
-        if self.measures.compass >= 45 and self.measures.compass <= 135:
-            return Direction.N
-        elif self.measures.compass < 45 and self.measures.compass > -45:
-            return Direction.E
-        elif self.measures.compass <= -45 and self.measures.compass >= -135:
-            return Direction.S
-        else:
-            return Direction.W
-
     def run(self):
         if self.status != 0:
             print("Connection refused or error")
