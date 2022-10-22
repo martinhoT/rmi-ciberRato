@@ -32,3 +32,9 @@ class Intersection:
 
     def get_neighbours(self):
         return self.neighbours
+
+    def get_x(self):
+        return self.x
+
+    def get_y(self):
+        return self.y

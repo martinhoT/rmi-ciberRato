@@ -1,3 +1,4 @@
+from ast import Pass
 import math
 
 from os import system
@@ -196,8 +197,36 @@ class Wander(Intention):
                 non_visited_paths = robot.intersections[position].get_possible_paths() - robot.intersections[position].get_visited_paths()
                 if not non_visited_paths:
 
-                    # TODO: choose where to go if intersection is exhausted
+                    # Obtain closest intersection with non visited paths
+                    closest_intersection = None
 
+                    neighbours = robot.intersections[position].get_neighbours()
+                    intersections = [robot.intersections[position]]
+                    checked_intersections = []
+
+                    while neighbours and intersections and not closest_intersection:
+
+                        this_intersection = intersections.pop()
+                        neighbours = this_intersection.get_neighbours()
+
+                        checked_intersections.append(this_intersection)
+
+                        if neighbours:
+
+                            for neighbour in neighbours:
+
+                                neighbour_intersection = robot.intersections[neighbour]
+                                non_visited_paths = neighbour_intersection.get_possible_paths() - neighbour_intersection.get_visited_paths()
+                                if non_visited_paths:
+                                    closest_intersection = neighbour_intersection
+                                    break
+
+                                if neighbour_intersection not in checked_intersections:
+                                    intersections.append(neighbour_intersection)
+
+                    if closest_intersection:
+                        robot.intention = CalculatePath(position, neighbour)
+                        return
                     if leftTurn:
                         robot.intention = Rotate(True, self.getDirection(robot.measures))
                     elif rightTurn:
@@ -269,26 +298,13 @@ class CheckIntersectionForwardBacktrack(Intention):
     def act(self, robot: 'RobC2'):
         self.log_measured(robot)
 
-        position = (robot.measures.x, robot.measures.y)
         direction = self.getDirection(robot.measures)
 
         # If the robot is back at the intersection
         if all(ls == '1' for ls in robot.measures.lineSensor[:3]) or all(ls == '1' for ls in robot.measures.lineSensor[4:]):
             
             if self.has_intersection_forward:
-                # position = self.adjust_position_to_intersections(position, robot.intersections)
 
-                """
-                position = self.round_pos(*position, robot)
-
-                # Should not happen
-                if position not in robot.intersections:
-                    print('Position', position, 'is not in the intersections array, but should be! Intersections array:', robot.intersections)
-
-                print('NEW INTERSECTION at', position, 'in direction', direction)
-                robot.intersections[position].add_path(direction)
-
-                """
                 current_intersection = robot.current_intersection
                 robot.intersections[current_intersection].add_path(direction)
 
@@ -385,7 +401,7 @@ class TurnBack(Intention):
     def act(self, robot: 'RobC2'):
         self.log_measured(robot)
 
-        if self.count < 4:
+        if self.count < 3:
             robot.driveMotors(-self.velocity, -self.velocity)
             self.count += 1
         else:
@@ -393,3 +409,117 @@ class TurnBack(Intention):
 
         if self.getDirection(robot.measures) == opposite_direction(self.starting_direction) and abs(self.get_angle_to_track(robot.measures)) < 35:
             robot.intention = Wander()
+
+
+class CalculatePath(Intention):
+
+    def __init__(self, start: Tuple[int, int], end: Tuple[int, int]):
+        super().__init__()
+        self.start = start
+        self.end = end
+        self.path = None
+        self.moves = None
+        self.current_move = None
+
+    def act(self, robot: 'RobC2'):
+        self.log_measured(robot)
+
+        # First time calculating the path
+        if self.path is None:
+            self.path = self.find_path(robot.intersections, self.start, self.end)
+
+        # First time calculating moves
+        if self.moves is None:
+            direction = self.getDirection(robot.measures) 
+
+            self.moves = []
+            self.calculate_moves(direction)
+
+        # print("Path:", self.path)
+        # print("Moves:", self.moves)
+
+        if self.path:
+            
+            position = self.round_pos_to_intersection(robot.measures.x, robot.measures.y, robot)
+                
+            # If the robot found an intersection
+            if position in self.path and position != self.end:
+                # Remove the intersection from the path
+                self.path.remove(position)
+                # Obtain the next move
+                self.current_move = self.moves.pop(0)
+
+            if self.current_move:
+                # TODO: Handle current move
+                pass
+
+            else:
+                # Drive forward until next intersection
+                robot.driveMotors(self.velocity, self.velocity)
+
+            # If the robot reached the end
+            if position == self.end:
+                robot.intention = Wander()
+
+    def find_path(self, intersections, start, end, path=[]):
+        
+        path = path + [start]
+        if start == end:
+            return path
+        
+        if not start in intersections:
+            return None
+
+        for neighbour in intersections[start].get_neighbours():
+            if neighbour not in path:
+                new_path = self.find_path(intersections, neighbour, end, path)
+                if new_path: 
+                    return new_path
+
+        return None
+
+    def calculate_moves(self, direction):
+        
+        for i in range(len(self.path) - 1):
+
+            new_direction = self.get_direction_from_path(self.path[i], self.path[i+1])
+
+            print(direction, new_direction)
+
+            if direction == new_direction:
+                # self.moves.append('Foward')
+                # move = (self.velocity, self.velocity)
+                move = MoveForward()
+
+            if (direction.value - 1) % 4 == new_direction.value:
+                # self.moves.append("Right")
+                # move = (self.velocity, -self.velocity)
+                move = Rotate(True, direction)
+            
+            elif (direction.value + 1) % 4 == new_direction.value:
+                # self.moves.append("Left")
+                # move = (-self.velocity, self.velocity)
+                move = Rotate(True, direction)
+
+            else: 
+                # self.moves.append("Back")
+                # move = (-self.velocity, -self.velocity)
+                move = TurnBack(direction)
+
+            direction = new_direction
+        
+    def get_direction_from_path(self, start, end):
+
+        # Same x
+        if start[0] == end[0]:
+            if end[1] > start[1]:
+                return Direction.N
+            else:
+                return Direction.S
+        
+        # Same y
+        else:
+            if end[0] > start[0]:
+                return Direction.W
+            else:
+                return Direction.E
