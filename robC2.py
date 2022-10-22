@@ -37,7 +37,11 @@ class MyRob(CRobLinkAngs):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
         self.map = {}
+
+        # Intersection handling
         self.intersections = {}
+        self.current_intersection = None
+        
         self.intention = Wander()
         self.starting_position = None
 
