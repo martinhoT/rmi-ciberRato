@@ -39,6 +39,7 @@ class MyRob(CRobLinkAngs):
         self.map = {}
         self.intersections = {}
         self.intention = Wander()
+        self.starting_position = None
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not

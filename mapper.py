@@ -1,4 +1,4 @@
-from typing import List, Iterable
+from typing import List
 
 def map_to_text(positions: List[int]) -> List[str]:
     start_position = positions[0]
