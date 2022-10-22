@@ -1,17 +1,19 @@
 import math
+
 from os import system
 from typing import Tuple, Union, TYPE_CHECKING
 from croblink import CMeasures
-from mapper import map_to_text
 if TYPE_CHECKING:
     from robC1 import MyRob as RobC1
     from robC2 import MyRob as RobC2
 
-from directions import Direction, DIRECTIONS_ARRAY
+from directions import Direction, left_direction, opposite_direction, right_direction
+from mapper import map_to_text
 
 
 
 LOG_CLEAR = True
+LOG_STARTING_POS = False
 LOG_INTENTION = True
 LOG_SENSORS = True
 LOG_INTERSECTIONS = True
@@ -41,11 +43,15 @@ class Intention:
         # Assumed that the robot is still in the starting position and hasn't updated it
         if not robot.starting_position:
             return 0, 0
-        return math.floor(x-robot.starting_position[0] + 0.5), math.floor(y-robot.starting_position[1] + 0.5)
+        # Works diffrently for negative numbers!
+        # return math.floor(x-robot.starting_position[0] + 0.5), math.floor(y-robot.starting_position[1] + 0.5)
+        return round(x-robot.starting_position[0]), round(y-robot.starting_position[1])
 
     def log_measured(self, robot: Union['RobC1', 'RobC2']):
         if LOG_CLEAR:
             system('clear')
+        if LOG_STARTING_POS:
+            print(robot.starting_position)
         if LOG_INTENTION:
             print(self.__class__.__name__)
         if LOG_SENSORS:
@@ -155,29 +161,32 @@ class Wander(Intention):
         # Possible intersection found
         if (leftTurn or rightTurn) and robot.measures.lineSensor[3] == '1':
 
-            # Obtain  position of robot in the map
+            # Obtain position of robot in the map
             position = self.round_pos(robot.measures.x, robot.measures.y, robot)
+            direction = self.getDirection(robot.measures)
 
             if position not in robot.intersections:
 
                 robot.intersections[position] = (set(), [])
-                direction = self.getDirection(robot.measures)
-
-                robot.intersections[position][0].add(DIRECTIONS_ARRAY[(direction.value - 2) % 4])
+                
+                robot.intersections[position][0].add( opposite_direction(direction) )
                 if leftTurn:
-                    print('NEW INTERSECTION at', position, 'in direction', DIRECTIONS_ARRAY[(direction.value - 1) % 4])
-                    robot.intersections[position][0].add(DIRECTIONS_ARRAY[(direction.value - 1) % 4])
-                    robot.intersections[position][1].append(DIRECTIONS_ARRAY[(direction.value - 1) % 4])
+                    print('NEW INTERSECTION at', position, 'in direction', left_direction(direction))
+                    robot.intersections[position][0].add( left_direction(direction) )
+                    robot.intersections[position][1].append( left_direction(direction) )
                 if rightTurn:
-                    print('NEW INTERSECTION at', position, 'in direction', DIRECTIONS_ARRAY[(direction.value + 1) % 4])
-                    robot.intersections[position][0].add(DIRECTIONS_ARRAY[(direction.value + 1) % 4])
-                    robot.intersections[position][1].append(DIRECTIONS_ARRAY[(direction.value + 1) % 4])
+                    print('NEW INTERSECTION at', position, 'in direction', right_direction(direction))
+                    robot.intersections[position][0].add( right_direction(direction) )
+                    robot.intersections[position][1].append( right_direction(direction) )
             
                 robot.intention = CheckIntersectionForward(position)
                 robot.driveMotors(0.0, 0.0)
                 return
 
             else:
+                if opposite_direction(direction) in robot.intersections[position][1]:
+                    robot.intersections[position][1].remove( opposite_direction(direction) )
+
                 if not robot.intersections[position][1]:
                     # TODO: choose where to go if intersection is exhausted
                     if leftTurn:
