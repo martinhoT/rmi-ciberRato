@@ -68,7 +68,7 @@ class Intention:
                     print(intersection, non_visited_directions)
             """
         if LOG_MAP and robot.map:
-            for line in map_to_text(list(robot.map.keys())):
+            for line in map_to_text(list(robot.map)):
                 print(''.join(line))
 
     def safeguard(self, measures: CMeasures):
@@ -130,9 +130,10 @@ class Wander(Intention):
 
         n_active = robot.measures.lineSensor.count("1")
 
-        x, y = self.round_pos(robot.measures.x, robot.measures.y, robot)
-        if (x,y) not in robot.map:
-            robot.map[(x,y)] = self.getDirection(robot.measures)
+        # Obtain position of robot in the map
+        position = self.round_pos(robot.measures.x, robot.measures.y, robot)
+        if position not in robot.map:
+            robot.map.append(position)
 
         # Robot is off track
         if (n_active == 0):
@@ -146,13 +147,14 @@ class Wander(Intention):
 
         leftTurn = left == 3
         rightTurn = right == 3
+        
+        direction = self.getDirection(robot.measures)
 
         # Possible intersection found
         if (leftTurn or rightTurn) and robot.measures.lineSensor[3] == '1':
 
-            # Obtain position of robot in the map
+            # Adjust position to the closest possible intersection
             position = self.round_pos_to_intersection(robot.measures.x, robot.measures.y, robot)
-            direction = self.getDirection(robot.measures)
 
             # If the intersection is not in the map, add it
             if position not in robot.intersections:
@@ -204,7 +206,37 @@ class Wander(Intention):
                 else:
                     robot.intention = TurnIntersection()
         
-        robot.driveMotors(*self.follow_path(robot.measures))
+        # If the intersection in front of me is far away, then speed up
+        intersection_in_front_distance = {
+            Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
+            Direction.W: lambda i, p: p[0] - i[0] if i[1] == p[1] else -1,
+            Direction.N: lambda i, p: i[1] - p[1] if i[0] == p[0] else -1,
+            Direction.S: lambda i, p: p[1] - i[1] if i[0] == p[0] else -1
+        }[direction]
+
+        distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in robot.intersections
+            if intersection_in_front_distance(intersection, position) > 0]
+
+        extra_velocity = 0
+        if distance_of_intersections_in_front_of_me:
+            # There needs to be straight path to the intersection
+            closest_distance = min(distance_of_intersections_in_front_of_me)
+            # TODO: simplify like above?
+            if direction == Direction.E:
+                positions_to_be_covered = {(position[0] + i, position[1]) for i in range(1, closest_distance + 1)}
+            elif direction == Direction.W:
+                positions_to_be_covered = {(position[0] - i, position[1]) for i in range(1, closest_distance + 1)}
+            elif direction == Direction.N:
+                positions_to_be_covered = {(position[0], position[1] + i) for i in range(1, closest_distance + 1)}
+            elif direction == Direction.S:
+                positions_to_be_covered = {(position[0], position[1] - i) for i in range(1, closest_distance + 1)}
+            
+            # Should reach that intersection in a known straight path from this position
+            if len(positions_to_be_covered - set(robot.map)) == 0:
+                extra_velocity = (closest_distance/4)**2 if closest_distance/4 < 1 else 1
+            
+        action = self.follow_path(robot.measures)
+        robot.driveMotors(action[0]*(1 + extra_velocity), action[1]*(1 + extra_velocity))
 
 
 class CheckIntersectionForward(Intention):
