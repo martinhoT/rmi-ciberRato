@@ -494,7 +494,7 @@ class CalculatePath(Intention):
             if (direction.value - 1) % 4 == new_direction.value:
                 # self.moves.append("Right")
                 # move = (self.velocity, -self.velocity)
-                move = Rotate(True, direction)
+                move = Rotate(False, direction)
             
             elif (direction.value + 1) % 4 == new_direction.value:
                 # self.moves.append("Left")
