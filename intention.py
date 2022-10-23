@@ -4,8 +4,8 @@ import math
 from os import system
 from typing import Tuple, Union, TYPE_CHECKING
 from croblink import CMeasures
-from intersection import intersection
-from robstate import RobState
+from intersection import Intersection
+from robState import RobState
 
 from directions import Direction, left_direction, opposite_direction, right_direction
 from mapper import map_to_text
@@ -62,7 +62,7 @@ class Intention:
         if LOG_INTENTION:
             print(self.__class__.__name__)
         if LOG_SENSORS:
-            print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({self.round_pos(measures.x, measures.y, state['starting_position'])})')
+            print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({self.round_pos(measures.x, measures.y, state.starting_position)})')
         if LOG_INTERSECTIONS:
             print('Intersections:')
             for position, intersection in state.intersections.items():
@@ -76,8 +76,8 @@ class Intention:
                 if non_visited_directions:
                     print(intersection, non_visited_directions)
             """
-        if LOG_MAP and state.map:
-            for line in map_to_text(list(state.map)):
+        if LOG_MAP and state.pmap:
+            for line in map_to_text(list(state.pmap)):
                 print(''.join(line))
 
     def safeguard(self, measures: CMeasures):
@@ -134,8 +134,8 @@ class Wander(Intention):
 
         # Obtain position of robot in the map
         position = self.round_pos(measures.x, measures.y, state.starting_position)
-        if position not in state.map:
-            state.map.append(position)
+        if position not in state.pmap:
+            state.pmap.append(position)
 
         # Robot is off track
         if (n_active == 0):
@@ -214,7 +214,7 @@ class Wander(Intention):
 
                             for neighbour in neighbours:
 
-                                neighbour_intersection = intersections[neighbour]
+                                neighbour_intersection = state.intersections[neighbour]
                                 non_visited_paths = neighbour_intersection.get_possible_paths() - neighbour_intersection.get_visited_paths()
                                 if non_visited_paths:
                                     closest_intersection = neighbour_intersection
@@ -260,7 +260,7 @@ class Wander(Intention):
             positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance + 1)}
             
             # Should reach that intersection in a known straight path from this position
-            if len(positions_to_be_covered - set(state.map)) == 0:
+            if len(positions_to_be_covered - set(state.pmap)) == 0:
                 x = closest_distance/4
                 if x < 0.25:
                     extra_velocity = -2*x

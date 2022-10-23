@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import List, Tuple, Dict
 from intersection import Intersection
 from directions import Direction

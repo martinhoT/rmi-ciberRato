@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 from intention import Wander
 from directions import Direction
-from robstate import RobState
+from robState import RobState
 
 CELLROWS=7
 CELLCOLS=14
@@ -43,6 +43,7 @@ class MyRob(CRobLinkAngs):
             current_intersection=None,
             starting_position=None,
         )
+        self.intention = Wander()
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
