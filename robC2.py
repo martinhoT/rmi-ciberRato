@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 
 from intention import Wander
 from directions import Direction
+from robstate import RobState
 
 CELLROWS=7
 CELLCOLS=14
@@ -35,13 +36,13 @@ CELLCOLS=14
 class MyRob(CRobLinkAngs):
     def __init__(self, rob_name, rob_id, angles, host):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
-        self.history = []
-        self.map = []
-        self.intersections = {}
-        self.current_intersection = None
-        
-        self.intention = Wander()
-        self.starting_position = None
+        self.state = RobState(
+            history=[],
+            pmap=[],
+            intersections={},
+            current_intersection=None,
+            starting_position=None,
+        )
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -79,7 +80,11 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
-                self.intention.act(self)
+                left_motor, right_motor, next_intention = self.intention.act(self.measures, self.state)
+                if next_intention:
+                    self.intention = next_intention
+                if left_motor != None and right_motor != None:
+                    self.driveMotors(left_motor, right_motor)
             elif state=='wait':
                 self.setReturningLed(True)
                 if self.measures.visitingLed==True:
@@ -92,7 +97,11 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
-                self.intention.act(self)
+                left_motor, right_motor, next_intention = self.intention.act(self.measures, self.state)
+                if next_intention:
+                    self.intention = next_intention
+                if left_motor != None and right_motor != None:
+                    self.driveMotors(left_motor, right_motor)
 
 
 class Map():
