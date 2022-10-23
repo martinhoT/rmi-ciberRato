@@ -21,6 +21,8 @@ LOG_SENSORS = True
 LOG_INTERSECTIONS = True
 LOG_MAP = True
 
+SPEED_OPTIMIZATIONS = True
+
 class Intention:
 
     def __init__(self):
@@ -49,6 +51,11 @@ class Intention:
         # return math.floor(x-robot.starting_position[0] + 0.5), math.floor(y-robot.starting_position[1] + 0.5)
         return round(x-robot.starting_position[0]), round(y-robot.starting_position[1])
 
+    def round_pos_to_intersection(self, x: float, y: float, robot: Union['RobC1', 'RobC2']):
+        if not robot.starting_position:
+            return 0, 0
+        return round((x-robot.starting_position[0])/2)*2, round((y-robot.starting_position[1])/2)*2
+
     def log_measured(self, robot: Union['RobC1', 'RobC2']):
         if LOG_CLEAR:
             system('clear')
@@ -61,8 +68,11 @@ class Intention:
         if LOG_INTERSECTIONS:
             print('Intersections:')
             for position, intersection in robot.intersections.items():
+                not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
+                # if not_visited:
+                    # print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
                 # print(position, "- Possible:" , intersection.get_possible_paths(), "- Visited:", intersection.get_visited_paths())
-                print(position, "- Not Visited:" , intersection.get_possible_paths() - intersection.get_visited_paths(), "- Neighbours:", intersection.get_neighbours())
+                print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
             """
             for intersection, (possible_directions, non_visited_directions) in robot.intersections.items():
                 if non_visited_directions:
@@ -99,8 +109,10 @@ class Intention:
         left = measures.lineSensor[:3].count("1")
         right = measures.lineSensor[4:].count("1")
 
-        return (self.velocity * (1 - (-angle_to_track/45) - (left*1/3 if left >= 2 else 0)), 
-                self.velocity * (1 - (angle_to_track/45) - (right*1/3 if right >= 2 else 0)))
+        left_imbalance = left - right
+
+        return (self.velocity * (1 - (-angle_to_track/45) - (left*1/3 if left_imbalance > 0 else 0)), 
+                self.velocity * (1 - (angle_to_track/45) - (right*1/3 if left_imbalance < 0 else 0)))
 
     def get_angle_to_track(self, measures: CMeasures):
         direction = self.getDirection(measures)
@@ -110,11 +122,6 @@ class Intention:
             else  180 if measures.compass > 135
             else -180 if measures.compass < -135
             else 0)
-
-    def round_pos_to_intersection(self, x: float, y: float, robot: Union['RobC1', 'RobC2']):
-        if not robot.starting_position:
-            return 0, 0
-        return round((x-robot.starting_position[0])/2)*2, round((y-robot.starting_position[1])/2)*2
 
 
 class Wander(Intention):
@@ -204,8 +211,10 @@ class Wander(Intention):
                     intersections = [robot.intersections[position]]
                     checked_intersections = []
 
+                    # Wavefront expansion to find closest intersection and path to it
                     while neighbours and intersections and not closest_intersection:
 
+                        # TODO: take into account the distance between neighbours? As in, only pop the closest one?
                         this_intersection = intersections.pop()
                         neighbours = this_intersection.get_neighbours()
 
@@ -224,6 +233,7 @@ class Wander(Intention):
                                 if neighbour_intersection not in checked_intersections:
                                     intersections.append(neighbour_intersection)
 
+                    # TODO: do we need to recalculate the path again? If we found the destination in the previous loop, then we already know the path of neighbors there
                     if closest_intersection:
                         robot.intention = CalculatePath(position, neighbour)
                         return
@@ -247,22 +257,28 @@ class Wander(Intention):
             if intersection_in_front_distance(intersection, position) > 0]
 
         extra_velocity = 0
-        if distance_of_intersections_in_front_of_me:
+        if SPEED_OPTIMIZATIONS and distance_of_intersections_in_front_of_me:
             # There needs to be straight path to the intersection
             closest_distance = min(distance_of_intersections_in_front_of_me)
-            # TODO: simplify like above?
-            if direction == Direction.E:
-                positions_to_be_covered = {(position[0] + i, position[1]) for i in range(1, closest_distance + 1)}
-            elif direction == Direction.W:
-                positions_to_be_covered = {(position[0] - i, position[1]) for i in range(1, closest_distance + 1)}
-            elif direction == Direction.N:
-                positions_to_be_covered = {(position[0], position[1] + i) for i in range(1, closest_distance + 1)}
-            elif direction == Direction.S:
-                positions_to_be_covered = {(position[0], position[1] - i) for i in range(1, closest_distance + 1)}
+            
+            intersection_step = {
+                Direction.E: lambda i, n: (i[0] + n, i[1]),
+                Direction.W: lambda i, n: (i[0] - n, i[1]),
+                Direction.N: lambda i, n: (i[0], i[1] + n),
+                Direction.S: lambda i, n: (i[0], i[1] - n)
+            }[direction]
+
+            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance + 1)}
             
             # Should reach that intersection in a known straight path from this position
             if len(positions_to_be_covered - set(robot.map)) == 0:
-                extra_velocity = (closest_distance/4)**2 if closest_distance/4 < 1 else 1
+                x = closest_distance/4
+                if x < 0.25:
+                    extra_velocity = -2*x
+                if x > 1:
+                    extra_velocity = 1
+                else:
+                    extra_velocity = x
             
         action = self.follow_path(robot.measures)
         robot.driveMotors(action[0]*(1 + extra_velocity), action[1]*(1 + extra_velocity))
@@ -331,10 +347,10 @@ class TurnIntersection(Intention):
         robot.intersections[position].add_visited_path(available)
         print("Taking direction", available)
 
-        if (direction.value - 1) % 4 == available.value:
+        if left_direction(direction) == available:
             robot.intention = Rotate(True, direction)
             
-        elif (direction.value + 1) % 4 == available.value:
+        elif right_direction(direction) == available:
             robot.intention = Rotate(False, direction)
 
         else:
@@ -491,6 +507,7 @@ class CalculatePath(Intention):
                 # move = (self.velocity, self.velocity)
                 move = MoveForward()
 
+            # TODO: is this correct, or switched up?
             if (direction.value - 1) % 4 == new_direction.value:
                 # self.moves.append("Right")
                 # move = (self.velocity, -self.velocity)
