@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 from intention import Wander, Finish
 from mapper import map_to_text
+from robData import RobData
 
 CELLROWS=7
 CELLCOLS=14
@@ -33,17 +34,16 @@ CELLCOLS=14
 class MyRob(CRobLinkAngs):
     def __init__(self, rob_name, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
-        self.history = []
-        self.map = []
-        self.intersections = {}
-        self.current_intersection = None
-        
-        self.path = []
-        self.intersections_intentions = []
-        
+        self.data = RobData(
+            history=[],
+            pmap=[],
+            intersections={},
+            current_intersection=None,
+            starting_position=None,            
+            path=[],
+            intersections_intentions=[]
+        )
         self.intention = Wander()
-
-        self.starting_position = None
         self.fname = fname
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
@@ -82,9 +82,13 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
+                motors, next_intention = self.intention.act(self.measures, self.data)
+                if motors:
+                    self.driveMotors(*motors)
                 if isinstance(self.intention, Finish):
                     break
-                self.intention.act(self)
+                if next_intention:
+                    self.intention = next_intention
             elif state=='wait':
                 self.setReturningLed(True)
                 if self.measures.visitingLed==True:
@@ -97,13 +101,17 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
+                motors, next_intention = self.intention.act(self.measures, self.data)
+                if motors:
+                    self.driveMotors(*motors)
                 if isinstance(self.intention, Finish):
                     break
-                self.intention.act(self)
+                if next_intention:
+                    self.intention = next_intention
 
         # Save final map
         with open(self.fname + ".map", "w") as file:
-            for line in map_to_text(self.map):
+            for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
 
 class Map():
