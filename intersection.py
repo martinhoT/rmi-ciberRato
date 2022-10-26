@@ -38,3 +38,9 @@ class Intersection:
 
     def get_y(self):
         return self.y
+
+    def get_coordinates(self):
+        return (self.x, self.y)
+
+    def __str__(self): return str(self.get_coordinates())
+    def __repr__(self): return str(self)
