@@ -22,7 +22,7 @@ LOG_INTERSECTIONS = True
 LOG_MAP = True
 LOG_CALCULATED_PATH = True
 
-SPEED_OPTIMIZATIONS = True
+SPEED_OPTIMIZATIONS = False
 
 class Intention:
 
@@ -142,10 +142,6 @@ class Wander(Intention):
     def act(self, robot: 'RobC2'):
         self.log_measured(robot)
 
-        # robot.history = 0 -> Straight
-        # robot.history = 1 -> Left
-        # robot.history = 2 -> Right
-
         if not robot.starting_position:
             robot.starting_position = (robot.measures.x, robot.measures.y)
 
@@ -194,6 +190,7 @@ class Wander(Intention):
 
                 # Add current path to intersection
                 robot.intersections[position].add_path(opposite_direction(direction))
+                # print('VISITED INTERSECTION', position, 'AT DIRECTION', opposite_direction(direction))
                 robot.intersections[position].add_visited_path(opposite_direction(direction))
 
                 if leftTurn:
@@ -205,6 +202,14 @@ class Wander(Intention):
                     robot.intersections[position].add_path(right_direction(direction))
             
                 robot.intention = CheckIntersectionForward(position)
+                robot.driveMotors(0.0, 0.0)
+                return
+
+            # All known intersections have been exhausted, which should mean that the entire map has been traversed
+            elif len(robot.intersections) != 0 \
+                and all(len(intersection.get_possible_paths() - intersection.get_visited_paths()) == 0 for intersection in robot.intersections.values()):
+
+                robot.intention = Finish(robot)
                 robot.driveMotors(0.0, 0.0)
                 return
 
@@ -227,6 +232,7 @@ class Wander(Intention):
 
                 # Check if it is a new direction
                 if opposite_direction(direction) not in robot.intersections[position].get_visited_paths():
+                    # print('VISITED INTERSECTION', position, 'AT DIRECTION', opposite_direction(direction))
                     robot.intersections[position].add_visited_path(opposite_direction(direction))
 
                 # If the robot already took all possible paths (at least once)
@@ -368,8 +374,10 @@ class CheckIntersectionForwardBacktrack(Intention):
             
             if self.has_intersection_forward:
 
-                current_intersection = robot.current_intersection
-                robot.intersections[current_intersection].add_path(direction)
+                # current_intersection = robot.current_intersection
+                # robot.intersections[current_intersection].add_path(direction)
+                intersection = self.round_pos_to_intersection(robot.measures.x, robot.measures.y, robot)
+                robot.intersections[intersection].add_path(direction)
 
             robot.driveMotors(self.velocity, self.velocity)
             robot.intention = TurnIntersection()
@@ -391,6 +399,7 @@ class TurnIntersection(Intention):
         non_visited_paths = robot.intersections[position].get_possible_paths() - robot.intersections[position].get_visited_paths()
         
         available = non_visited_paths.pop()
+        # print('VISITED INTERSECTION', position, 'AT DIRECTION', available)
         robot.intersections[position].add_visited_path(available)
         print("Taking direction", available)
 
@@ -406,16 +415,17 @@ class TurnIntersection(Intention):
 
 class Rotate(Intention):
 
-    def __init__(self, left: bool, starting_direction: Direction):
+    def __init__(self, left: bool, starting_direction: Direction, advancement_steps: int=4):
         super().__init__()
         self.left = left
         self.starting_direction = starting_direction
         self.count = 0
+        self.advancement_steps = advancement_steps
     
     def act(self, robot: 'RobC2'):
         self.log_measured(robot)
 
-        if self.count < 4:
+        if self.count < self.advancement_steps:
             robot.driveMotors(self.velocity, self.velocity)
             self.count += 1
         else:
@@ -424,11 +434,17 @@ class Rotate(Intention):
         if self.getDirection(robot.measures) != self.starting_direction and abs(self.get_angle_to_track(robot.measures)) < 30:
 
             # Update visited path
-            direction = self.getDirection(robot.measures)        
-            current_intersection = robot.current_intersection
-            robot.intersections[current_intersection].add_visited_path(direction)
+            direction = self.getDirection(robot.measures)
+            # current_intersection = robot.current_intersection
+            # robot.intersections[current_intersection].add_visited_path(direction)
+            intersection = self.round_pos_to_intersection(robot.measures.x, robot.measures.y, robot)
+            # print('VISITED INTERSECTION', intersection, 'AT DIRECTION', direction)
+            robot.intersections[intersection].add_visited_path(direction)
 
             robot.intention = Wander()
+    
+    def __str__(self):
+        return 'Rotate ' +  ('left' if self.left else 'right')
 
 
 class MoveForward(Intention):
@@ -438,8 +454,11 @@ class MoveForward(Intention):
 
         # Update visited path
         direction = self.getDirection(robot.measures)        
-        current_intersection = robot.current_intersection
-        robot.intersections[current_intersection].add_visited_path(direction)
+        # current_intersection = robot.current_intersection
+        # robot.intersections[current_intersection].add_visited_path(direction)
+        intersection = self.round_pos_to_intersection(robot.measures.x, robot.measures.y, robot)
+        # print('VISITED INTERSECTION', intersection, 'AT DIRECTION', direction)
+        robot.intersections[intersection].add_visited_path(direction)
 
         robot.driveMotors(self.velocity, self.velocity)
 
@@ -452,6 +471,9 @@ class MoveForward(Intention):
 
         if count <= 3:
             robot.intention = Wander()
+    
+    def __str__(self):
+        return 'Move forward'
 
 
 class TurnBack(Intention):
@@ -461,28 +483,16 @@ class TurnBack(Intention):
         self.starting_direction = starting_direction
         self.count = 0
 
-    # def act(self, robot: 'RobC2'):
-    #     self.log_measured(robot)
-
-    #     if self.count < 3:
-    #         robot.driveMotors(-self.velocity, -self.velocity)
-    #         self.count += 1
-    #     else:
-    #         robot.driveMotors(self.velocity, -self.velocity)
-
-    #     if self.getDirection(robot.measures) == opposite_direction(self.starting_direction) and abs(self.get_angle_to_track(robot.measures)) < 35:
-    #         robot.intention = Wander()
-
     def act(self, robot: 'RobC2'):
         n_active = robot.measures.lineSensor.count("1")
-
-
 
         robot.driveMotors(self.velocity, -self.velocity)
 
         if n_active != 0:
             robot.intention = Wander()
-
+    
+    def __str__(self):
+        return 'Turn back'
 
 
 class CalculatePath(Intention):
@@ -577,3 +587,15 @@ class CalculatePath(Intention):
                 return Direction.E
             else:
                 return Direction.W
+
+
+class Finish(Intention):
+
+    def __init__(self, robot: Union['RobC1', 'RobC2']):
+        super().__init__()
+        print('Finished')
+        for line in map_to_text(robot.map):
+            print(''.join(line))
+
+    def act(self, robot: Union['RobC1', 'RobC2']):
+        robot.driveMotors(0.0, 0.0)
