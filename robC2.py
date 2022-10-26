@@ -1,13 +1,11 @@
 
-from lib2to3.pgen2.token import LEFTSHIFT
-from shutil import SpecialFileError
 import sys
 from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
 
-from intention import Wander
-from directions import Direction
+from intention import Wander, Finish
+from mapper import map_to_text
 
 CELLROWS=7
 CELLCOLS=14
@@ -33,7 +31,7 @@ CELLCOLS=14
 '''
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, rob_name, rob_id, angles, host):
+    def __init__(self, rob_name, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
         self.history = []
         self.map = []
@@ -46,6 +44,7 @@ class MyRob(CRobLinkAngs):
         self.intention = Wander()
 
         self.starting_position = None
+        self.fname = fname
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -83,6 +82,8 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
+                if isinstance(self.intention, Finish):
+                    break
                 self.intention.act(self)
             elif state=='wait':
                 self.setReturningLed(True)
@@ -96,8 +97,14 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
+                if isinstance(self.intention, Finish):
+                    break
                 self.intention.act(self)
 
+        # Save final map
+        with open(self.fname + ".map", "w") as file:
+            for line in map_to_text(self.map):
+                print(''.join(line), file=file)
 
 class Map():
     def __init__(self, filename):
@@ -131,6 +138,7 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
+fname = 'robC2'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:
@@ -141,12 +149,14 @@ for i in range(1, len(sys.argv),2):
         rob_name = sys.argv[i + 1]
     elif (sys.argv[i] == "--map" or sys.argv[i] == "-m") and i != len(sys.argv) - 1:
         mapc = Map(sys.argv[i + 1])
+    elif (sys.argv[i] == "--filename" or sys.argv[i] == "-f") and i != len(sys.argv) -1:
+        fname = sys.argv[i + 1]
     else:
         print("Unkown argument", sys.argv[i])
         quit()
 
 if __name__ == '__main__':
-    rob=MyRob(rob_name,pos,[0.0,60.0,-60.0,180.0],host)
+    rob=MyRob(rob_name,pos,[0.0,60.0,-60.0,180.0],host,fname)
     if mapc != None:
         rob.setMap(mapc.labMap)
         rob.printMap()
