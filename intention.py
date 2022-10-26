@@ -216,6 +216,14 @@ class Wander(Intention):
             # If the intersection is in the map
             else:
 
+                # Add last intersection as neighbour
+                if position != robot.current_intersection:
+                    robot.intersections[position].add_neighbour(robot.current_intersection)
+                    robot.intersections[robot.current_intersection].add_neighbour(position)
+
+                    # Update current neighbour
+                    robot.current_intersection = position
+
                 # If there are pre-calculated intentions for this intersection, follow them
                 if position in robot.path:
 
@@ -243,14 +251,15 @@ class Wander(Intention):
                     closest_intersection = None
 
                     neighbours = robot.intersections[position].get_neighbours()
-                    intersections = [robot.intersections[position]]
+                    intersections = [(position, robot.intersections[position])]
                     checked_intersections = []
+                    manhattan_distance_to_origin = lambda t: abs(t[0][0] - position[0]) + abs(t[0][1] - position[1])
 
                     # Wavefront expansion to find closest intersection and path to it
                     while neighbours and intersections and not closest_intersection:
 
-                        # TODO: take into account the distance between neighbours? As in, only pop the closest one?
-                        this_intersection = intersections.pop()
+                        intersections.sort(key=manhattan_distance_to_origin, reverse=True)
+                        _, this_intersection = intersections.pop()
                         neighbours = this_intersection.get_neighbours()
 
                         checked_intersections.append(this_intersection)
@@ -266,7 +275,7 @@ class Wander(Intention):
                                     break
 
                                 if neighbour_intersection not in checked_intersections:
-                                    intersections.append(neighbour_intersection)
+                                    intersections.append((neighbour, neighbour_intersection))
 
                     # TODO: do we need to recalculate the path again? If we found the destination in the previous loop, then we already know the path of neighbors there
                     if closest_intersection:
