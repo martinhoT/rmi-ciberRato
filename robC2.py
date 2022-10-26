@@ -40,7 +40,11 @@ class MyRob(CRobLinkAngs):
         self.intersections = {}
         self.current_intersection = None
         
+        self.path = []
+        self.intersections_intentions = []
+        
         self.intention = Wander()
+
         self.starting_position = None
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
