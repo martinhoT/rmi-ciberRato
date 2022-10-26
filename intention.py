@@ -2,7 +2,7 @@ import math
 import random
 
 from os import system
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from croblink import CMeasures
 from intersection import Intersection
 from robData import RobData
@@ -95,8 +95,8 @@ class Intention:
         elif measures.irSensor[right_id]> 2.7:
             return (0.0, 0.1)
 
-        return (self.velocity, self.velocity)
         # return (0.15, 0.15) # Max speed
+        return (self.velocity, self.velocity)
 
     # The path is either a vertical or horizontal line
     # Only works with RobC2 since the compass is used
@@ -119,6 +119,78 @@ class Intention:
             else  180 if measures.compass > 135
             else -180 if measures.compass < -135
             else 0)
+    
+    @classmethod
+    def calculate_moves(cls, direction: Direction, path: List[Intersection]) -> List['Intention']:
+        
+        moves = []
+        for i in range(len(path) - 1):
+
+            new_direction = cls.get_direction_from_path(path[i], path[i+1])
+
+            if direction == new_direction:
+                move = MoveForward()
+            else:
+                move = Rotate(direction, new_direction)
+
+            moves.append(move)
+            direction = new_direction
+
+        return moves
+        
+    @classmethod
+    def get_direction_from_path(cls, start: Intersection, end: Intersection) -> Direction:
+
+        # Same x
+        if start.get_x() == end.get_x():
+            if end.get_y() > start.get_y():
+                return Direction.N
+            else:
+                return Direction.S
+        
+        # Same y
+        else:
+            if end.get_x() > start.get_x():
+                return Direction.E
+            else:
+                return Direction.W
+
+    @classmethod
+    def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,
+            position: Tuple[int, int],
+            direction: Direction,
+            intersections: Dict[Intersection, Direction],
+            pmap: List[Tuple[int, int]]):
+
+        # If the intersection in front of me is far away, then speed up
+        intersection_in_front_distance = {
+            Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
+            Direction.W: lambda i, p: p[0] - i[0] if i[1] == p[1] else -1,
+            Direction.N: lambda i, p: i[1] - p[1] if i[0] == p[0] else -1,
+            Direction.S: lambda i, p: p[1] - i[1] if i[0] == p[0] else -1
+        }[direction]
+
+        distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in intersections
+            if intersection_in_front_distance(intersection, position) > 0]
+
+        if SPEED_OPTIMIZATIONS and distance_of_intersections_in_front_of_me:
+            # There needs to be straight path to the intersection
+            closest_distance = min(distance_of_intersections_in_front_of_me)
+            
+            intersection_step = {
+                Direction.E: lambda i, n: (i[0] + n, i[1]),
+                Direction.W: lambda i, n: (i[0] - n, i[1]),
+                Direction.N: lambda i, n: (i[0], i[1] + n),
+                Direction.S: lambda i, n: (i[0], i[1] - n)
+            }[direction]
+
+            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance + 1)}
+            
+            # Should reach that intersection in a known straight path from this position
+            if len(positions_to_be_covered - set(pmap)) == 0:
+                return closest_distance
+        
+        return None
 
     def __str__(self): return self.__class__.__name__
     def __repr__(self): return str(self)
@@ -142,11 +214,12 @@ class Wander(Intention):
         position = self.round_pos(measures.x, measures.y, rdata.starting_position)
         if position not in rdata.pmap:
             rdata.pmap.append(position)
+        
+        direction = self.getDirection(measures)
 
         # Robot is off track
         if (n_active == 0):
-            # TODO: switch TurnBack with Rotate to opposite direction?
-            return (0.0, 0.0), TurnBack(self.getDirection(measures))
+            return (0.0, 0.0), TurnBack(direction)
 
         # Robot is on track
         # TODO: watch out for flipped bits, might ruin everything
@@ -157,8 +230,6 @@ class Wander(Intention):
         # rightTurn = right == 3
         leftTurn = left >= 3 and measures.lineSensor[0] == "1"
         rightTurn = right >= 3 and measures.lineSensor[6] == "1"
-        
-        direction = self.getDirection(measures)
 
         # Possible intersection found
         if (leftTurn or rightTurn) and measures.lineSensor[3] == '1':
@@ -185,11 +256,9 @@ class Wander(Intention):
                 rdata.intersections[position].add_visited_path(opposite_direction(direction))
 
                 if leftTurn:
-                    print('NEW INTERSECTION at', position, 'in direction', left_direction(direction))
                     rdata.intersections[position].add_path(left_direction(direction))
 
                 if rightTurn:
-                    print('NEW INTERSECTION at', position, 'in direction', right_direction(direction))
                     rdata.intersections[position].add_path(right_direction(direction))
             
                 return (0.0, 0.0), CheckIntersectionForward(position)
@@ -232,8 +301,8 @@ class Wander(Intention):
                 non_visited_paths = rdata.intersections[position].get_possible_paths() - rdata.intersections[position].get_visited_paths()
                 if not non_visited_paths:
 
-                    # Obtain closest intersection with non visited paths
-                    closest_intersection = None
+                    # Obtain path to closest intersection with non visited paths
+                    path_to_closest_intersection = None
 
                     neighbours = rdata.intersections[position].get_neighbours()
                     intersections = [(rdata.intersections[position], [], 0)]
@@ -242,7 +311,7 @@ class Wander(Intention):
                     distance_to_this_point = lambda t: t[2]
 
                     # Wavefront expansion to find closest intersection and path to it
-                    while neighbours and intersections and not closest_intersection:
+                    while neighbours and intersections and not path_to_closest_intersection:
 
                         intersections.sort(key=distance_to_this_point, reverse=True)
                         this_intersection, previous_intersections, previous_distance = intersections.pop()
@@ -262,15 +331,16 @@ class Wander(Intention):
                                 distance = distance_x + distance_y
                                 
                                 if non_visited_paths:
-                                    closest_intersection = (neighbour_intersection, previous_intersections + [this_intersection], previous_distance + distance)
+                                    path_to_closest_intersection = previous_intersections + [this_intersection, neighbour_intersection]
                                     break
 
                                 if neighbour_intersection not in checked_intersections:
                                     intersections.append((neighbour_intersection, previous_intersections + [this_intersection], previous_distance + distance))
 
-                    if closest_intersection:
-                        path = closest_intersection[1] + [closest_intersection[0]]
-                        return None, CalculatePath(path)
+                    if path_to_closest_intersection:
+                        rdata.intersections_intentions = Intention.calculate_moves(direction, path_to_closest_intersection)
+                        rdata.path = path_to_closest_intersection[1:]
+                        return (0.0, 0.0), rdata.intersections_intentions.pop(0)
                         
                     else:
                         # Random path from available paths (to avoid loops)
@@ -284,33 +354,10 @@ class Wander(Intention):
                 else:
                     return (0.0, 0.0), TurnIntersection()
         
-        # If the intersection in front of me is far away, then speed up
-        intersection_in_front_distance = {
-            Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
-            Direction.W: lambda i, p: p[0] - i[0] if i[1] == p[1] else -1,
-            Direction.N: lambda i, p: i[1] - p[1] if i[0] == p[0] else -1,
-            Direction.S: lambda i, p: p[1] - i[1] if i[0] == p[0] else -1
-        }[direction]
-
-        distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in rdata.intersections
-            if intersection_in_front_distance(intersection, position) > 0]
-
         extra_velocity = 0
-        if SPEED_OPTIMIZATIONS and distance_of_intersections_in_front_of_me:
-            # There needs to be straight path to the intersection
-            closest_distance = min(distance_of_intersections_in_front_of_me)
-            
-            intersection_step = {
-                Direction.E: lambda i, n: (i[0] + n, i[1]),
-                Direction.W: lambda i, n: (i[0] - n, i[1]),
-                Direction.N: lambda i, n: (i[0], i[1] + n),
-                Direction.S: lambda i, n: (i[0], i[1] - n)
-            }[direction]
-
-            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance + 1)}
-            
-            # Should reach that intersection in a known straight path from this position
-            if len(positions_to_be_covered - set(rdata.pmap)) == 0:
+        if SPEED_OPTIMIZATIONS:
+            closest_distance = Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(position, direction, rdata.intersections, rdata.pmap)
+            if closest_distance:
                 x = closest_distance/4
                 if x < 0.25:
                     extra_velocity = -2*x
@@ -371,6 +418,7 @@ class CheckIntersectionForwardBacktrack(Intention):
         return (-self.velocity, -self.velocity), None
 
 
+# TODO: extract to a simple function? It's only used for a single step
 class TurnIntersection(Intention):
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
@@ -480,60 +528,6 @@ class TurnBack(Intention):
     
     def __str__(self): return 'Turn back'
     def __repr__(self): return str(self)
-
-
-class CalculatePath(Intention):
-
-    def __init__(self, path: List[Intersection]):
-        super().__init__()
-        self.path = path
-
-    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
-        self.log_measured(measures, rdata)
-
-        direction = self.getDirection(measures) 
-        rdata.intersections_intentions = self.calculate_moves(direction)
-
-        next_intention = None
-        if rdata.intersections_intentions:
-            
-            rdata.path = self.path[1:]
-            next_intention = rdata.intersections_intentions.pop(0)
-
-        return (0.0, 0.0), next_intention
-
-    def calculate_moves(self, direction):
-        
-        moves = []
-        for i in range(len(self.path) - 1):
-
-            new_direction = self.get_direction_from_path(self.path[i], self.path[i+1])
-
-            if direction == new_direction:
-                move = MoveForward()
-            else:
-                move = Rotate(direction, new_direction)
-
-            moves.append(move)
-            direction = new_direction
-
-        return moves
-        
-    def get_direction_from_path(self, start: Intersection, end: Intersection):
-
-        # Same x
-        if start.get_x() == end.get_x():
-            if end.get_y() > start.get_y():
-                return Direction.N
-            else:
-                return Direction.S
-        
-        # Same y
-        else:
-            if end.get_x() > start.get_x():
-                return Direction.E
-            else:
-                return Direction.W
 
 
 class Finish(Intention):

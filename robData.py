@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 class RobData:
     history: list
     pmap: List[Tuple[int, int]]
-    intersections: Dict[Intersection, Direction]
+    intersections: Dict[Tuple[int, int], Intersection]
     current_intersection: Intersection
     starting_position: Tuple[int, int]
     path: List[Intersection]
