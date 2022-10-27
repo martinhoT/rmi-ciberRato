@@ -42,15 +42,15 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool]) -> List[N
         checked_nodes.append(this_node)
 
         for neighbour in neighbours:
-
-            distance_x = abs(this_node.get_x() - neighbour.get_x())
-            distance_y = abs(this_node.get_y() - neighbour.get_y())
-            distance = distance_x + distance_y
             
             if key(neighbour):
                 return previous_nodes + [this_node, neighbour]
 
             if neighbour not in checked_nodes:
+                distance_x = abs(this_node.get_x() - neighbour.get_x())
+                distance_y = abs(this_node.get_y() - neighbour.get_y())
+                distance = distance_x + distance_y
+
                 nodes_to_explore.append((neighbour, previous_nodes + [this_node], previous_distance + distance))
     
     return None
