@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, TYPE_CHECKING
-from intersection import Intersection
+from graph import Checkpoint, Intersection
 if TYPE_CHECKING:
     from intention import Intention
 
@@ -14,4 +14,4 @@ class RobData:
     starting_position:          Tuple[int, int]                     = field(default=())
     path:                       List[Intersection]                  = field(default_factory=list)
     intersections_intentions:   List['Intention']                   = field(default_factory=list)
-    checkpoints:                Dict[int, Tuple[int, int]]          = field(default_factory=dict)
+    checkpoints:                Dict[int, Checkpoint]               = field(default_factory=dict)

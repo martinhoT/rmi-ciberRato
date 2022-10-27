@@ -1,4 +1,5 @@
-from typing import List
+from typing import Callable, Dict, List, Tuple
+from graph import Node
 
 def map_to_text(positions: List[int]) -> List[str]:
     start_position = positions[0]
@@ -22,3 +23,34 @@ def map_to_text(positions: List[int]) -> List[str]:
                 ' '
 
     return grid
+
+def wavefront_expansion(start_node: Node, key: Callable[[Node], bool]) -> List[Node]:
+    """Wavefront expansion algorithm to find the path to the closest node that satisfies the `key` condition."""
+
+    # (Node, Path excluding this node, Path distance)
+    nodes_to_explore  = [(start_node, [], 0)]
+    neighbours = None
+    checked_nodes = []
+    distance_to_this_point = lambda t: t[2]
+
+    while nodes_to_explore:
+
+        nodes_to_explore.sort(key=distance_to_this_point, reverse=True)
+        this_node, previous_nodes, previous_distance = nodes_to_explore.pop()
+        neighbours = this_node.get_neighbours()
+
+        checked_nodes.append(this_node)
+
+        for neighbour in neighbours:
+
+            distance_x = abs(this_node.get_x() - neighbour.get_x())
+            distance_y = abs(this_node.get_y() - neighbour.get_y())
+            distance = distance_x + distance_y
+            
+            if key(neighbour):
+                return previous_nodes + [this_node, neighbour]
+
+            if neighbour not in checked_nodes:
+                nodes_to_explore.append((neighbour, previous_nodes + [this_node], previous_distance + distance))
+    
+    return None

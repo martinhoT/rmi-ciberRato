@@ -4,11 +4,11 @@ import random
 from os import system
 from typing import Dict, List, Tuple
 from croblink import CMeasures
-from intersection import Intersection
+from graph import Intersection
 from robData import RobData
 
 from directions import Direction, left_direction, opposite_direction, right_direction
-from utils import map_to_text
+from utils import map_to_text, wavefront_expansion
 
 
 
@@ -253,10 +253,10 @@ class Wander(Intention):
                 # Add neighbours
                 if rdata.previous_intersection:
                     rdata.intersections[position].add_neighbour(rdata.previous_intersection)
-                    rdata.intersections[rdata.previous_intersection].add_neighbour(position)
+                    rdata.previous_intersection.add_neighbour(rdata.intersections[position])
 
                 # Update current neighbour
-                rdata.previous_intersection = position
+                rdata.previous_intersection = rdata.intersections[position]
 
                 # Add current path to intersection
                 rdata.intersections[position].add_path(opposite_direction(direction))
@@ -282,10 +282,10 @@ class Wander(Intention):
                 # Add last intersection as neighbour
                 if position != rdata.previous_intersection:
                     rdata.intersections[position].add_neighbour(rdata.previous_intersection)
-                    rdata.intersections[rdata.previous_intersection].add_neighbour(position)
+                    rdata.previous_intersection.add_neighbour(rdata.intersections[position])
 
                     # Update current neighbour
-                    rdata.previous_intersection = position
+                    rdata.previous_intersection = rdata.intersections[position]
 
                 # If there are pre-calculated intentions for this intersection, follow them
                 intersection = rdata.intersections[position]
@@ -308,42 +308,10 @@ class Wander(Intention):
                 non_visited_paths = rdata.intersections[position].get_possible_paths() - rdata.intersections[position].get_visited_paths()
                 if not non_visited_paths:
 
-                    # Obtain path to closest intersection with non visited paths
-                    path_to_closest_intersection = None
-
-                    neighbours = rdata.intersections[position].get_neighbours()
-                    intersections = [(rdata.intersections[position], [], 0)]
-                    checked_intersections = []
-                    previous_intersections = []
-                    distance_to_this_point = lambda t: t[2]
-
-                    # TODO: extract wavefront expansion algorithm to a function since it will also be used for the final path planning in C3 (possibly multiple times)
-                    # Wavefront expansion to find closest intersection and path to it
-                    while neighbours and intersections and not path_to_closest_intersection:
-
-                        intersections.sort(key=distance_to_this_point, reverse=True)
-                        this_intersection, previous_intersections, previous_distance = intersections.pop()
-                        neighbours = this_intersection.get_neighbours()
-
-                        checked_intersections.append(this_intersection)
-
-                        if neighbours:
-
-                            for neighbour in neighbours:
-
-                                neighbour_intersection = rdata.intersections[neighbour]
-                                non_visited_paths = neighbour_intersection.get_possible_paths() - neighbour_intersection.get_visited_paths()
-                                
-                                distance_x = abs(this_intersection.get_x() - neighbour_intersection.get_x())
-                                distance_y = abs(this_intersection.get_y() - neighbour_intersection.get_y())
-                                distance = distance_x + distance_y
-                                
-                                if non_visited_paths:
-                                    path_to_closest_intersection = previous_intersections + [this_intersection, neighbour_intersection]
-                                    break
-
-                                if neighbour_intersection not in checked_intersections:
-                                    intersections.append((neighbour_intersection, previous_intersections + [this_intersection], previous_distance + distance))
+                    # Wavefront expansion to find the path to the closest intersection with non-visited paths
+                    path_to_closest_intersection = wavefront_expansion(
+                        start_node=rdata.intersections[position],
+                        key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()))
 
                     if path_to_closest_intersection:
                         rdata.intersections_intentions = Intention.calculate_moves(direction, path_to_closest_intersection)

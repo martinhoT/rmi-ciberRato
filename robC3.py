@@ -141,7 +141,7 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-fname = 'robC2'
+fname = 'robC3'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:
