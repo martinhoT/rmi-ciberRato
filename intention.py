@@ -12,15 +12,15 @@ from utils import map_to_text, wavefront_expansion
 
 
 
-LOG_CLEAR = True
+LOG_CLEAR = False
 LOG_STARTING_POS = False
-LOG_INTENTION = True
-LOG_SENSORS = True
+LOG_INTENTION = False
+LOG_SENSORS = False
 LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = False
-LOG_GROUND = True
-LOG_CHECKPOINTS = True
-LOG_MAP = True
+LOG_GROUND = False
+LOG_CHECKPOINTS = False
+LOG_MAP = False
 
 SPEED_OPTIMIZATIONS = False
 
@@ -70,8 +70,9 @@ class Intention:
             print('Intersections:')
             for position, intersection in rdata.intersections.items():
                 not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
-                if not_visited:
-                    print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
+                print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
+                # if not_visited:
+                    # print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
         if LOG_CALCULATED_PATH:
             print('Calculated Path:')
             print('Robot Position:', self.round_pos(measures.x, measures.y, rdata.starting_position))
@@ -268,7 +269,7 @@ class Wander(Intention):
             if intersection_pos not in rdata.intersections:
 
                 # state.intersections[position] = Intersection()
-                intersection = Intersection(position[0], position[1])
+                intersection = Intersection(intersection_pos[0], intersection_pos[1])
                 rdata.intersections[intersection_pos] = intersection
                 
                 self.update_neighbours(intersection, rdata)
@@ -296,6 +297,8 @@ class Wander(Intention):
 
                 intersection = rdata.intersections[intersection_pos]
 
+                self.update_neighbours(intersection, rdata)
+
                 # If there are pre-calculated intentions for this intersection, follow them
                 if intersection in rdata.path:
 
@@ -307,8 +310,6 @@ class Wander(Intention):
                     #  Reached the end of the path
                     else:
                         rdata.path.pop()
-
-                self.update_neighbours(intersection, rdata)
 
                 # Check if it is a new direction
                 if opposite_direction(direction) not in intersection.get_visited_paths():

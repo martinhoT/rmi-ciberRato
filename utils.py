@@ -41,6 +41,8 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool]) -> List[N
 
         checked_nodes.append(this_node)
 
+        print(this_node, previous_nodes, previous_distance)
+
         for neighbour in neighbours:
             
             if key(neighbour):
