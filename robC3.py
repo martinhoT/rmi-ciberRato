@@ -105,6 +105,9 @@ class MyRob(CRobLinkAngs):
         with open(self.fname + ".map", "w") as file:
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
+        
+        # TODO: calculate path and save it
+        pass
 
 class Map():
     def __init__(self, filename):

@@ -8,7 +8,7 @@ from intersection import Intersection
 from robData import RobData
 
 from directions import Direction, left_direction, opposite_direction, right_direction
-from mapper import map_to_text
+from utils import map_to_text
 
 
 
@@ -16,9 +16,11 @@ LOG_CLEAR = True
 LOG_STARTING_POS = False
 LOG_INTENTION = True
 LOG_SENSORS = True
-LOG_INTERSECTIONS = True
+LOG_INTERSECTIONS = False
+LOG_CALCULATED_PATH = False
+LOG_GROUND = True
+LOG_CHECKPOINTS = True
 LOG_MAP = True
-LOG_CALCULATED_PATH = True
 
 SPEED_OPTIMIZATIONS = False
 
@@ -75,6 +77,10 @@ class Intention:
             print('Robot Position:', self.round_pos(measures.x, measures.y, rdata.starting_position))
             print(rdata.path)
             print(rdata.intersections_intentions)
+        if LOG_GROUND:
+            print('Ground:', measures.ground)
+        if LOG_CHECKPOINTS:
+            print('Checkpoints:', rdata.checkpoints)
         if LOG_MAP and rdata.pmap:
             for line in map_to_text(list(rdata.pmap)):
                 print(''.join(line))
@@ -198,10 +204,6 @@ class Intention:
 
 class Wander(Intention):
 
-    def __init__(self):
-        super().__init__()
-        self.count = 0
-
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
@@ -229,8 +231,13 @@ class Wander(Intention):
         # leftTurn = left == 3
         # rightTurn = right == 3
         leftTurn = left >= 3 and measures.lineSensor[0] == "1"
-        rightTurn = right >= 3 and measures.lineSensor[6] == "1"
+        rightTurn = right >= 3 and measures.lineSensor[-1] == "1"
 
+        # Save checkpoint if one was found
+        if (measures.ground != -1):
+            rdata.checkpoints[measures.ground] = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+
+        # TODO: extract intersection treatment to a function?
         # Possible intersection found
         if (leftTurn or rightTurn) and measures.lineSensor[3] == '1':
 
@@ -244,12 +251,12 @@ class Wander(Intention):
                 rdata.intersections[position] = Intersection(position[0], position[1])
                 
                 # Add neighbours
-                if rdata.current_intersection:
-                    rdata.intersections[position].add_neighbour(rdata.current_intersection)
-                    rdata.intersections[rdata.current_intersection].add_neighbour(position)
+                if rdata.previous_intersection:
+                    rdata.intersections[position].add_neighbour(rdata.previous_intersection)
+                    rdata.intersections[rdata.previous_intersection].add_neighbour(position)
 
                 # Update current neighbour
-                rdata.current_intersection = position
+                rdata.previous_intersection = position
 
                 # Add current path to intersection
                 rdata.intersections[position].add_path(opposite_direction(direction))
@@ -273,12 +280,12 @@ class Wander(Intention):
             else:
 
                 # Add last intersection as neighbour
-                if position != rdata.current_intersection:
-                    rdata.intersections[position].add_neighbour(rdata.current_intersection)
-                    rdata.intersections[rdata.current_intersection].add_neighbour(position)
+                if position != rdata.previous_intersection:
+                    rdata.intersections[position].add_neighbour(rdata.previous_intersection)
+                    rdata.intersections[rdata.previous_intersection].add_neighbour(position)
 
                     # Update current neighbour
-                    rdata.current_intersection = position
+                    rdata.previous_intersection = position
 
                 # If there are pre-calculated intentions for this intersection, follow them
                 intersection = rdata.intersections[position]
@@ -310,6 +317,7 @@ class Wander(Intention):
                     previous_intersections = []
                     distance_to_this_point = lambda t: t[2]
 
+                    # TODO: extract wavefront expansion algorithm to a function since it will also be used for the final path planning in C3 (possibly multiple times)
                     # Wavefront expansion to find closest intersection and path to it
                     while neighbours and intersections and not path_to_closest_intersection:
 
@@ -356,7 +364,8 @@ class Wander(Intention):
         
         extra_velocity = 0
         if SPEED_OPTIMIZATIONS:
-            closest_distance = Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(position, direction, rdata.intersections, rdata.pmap)
+            closest_distance = Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(
+                position, direction, rdata.intersections, rdata.pmap)
             if closest_distance:
                 x = closest_distance/4
                 if x < 0.25:
