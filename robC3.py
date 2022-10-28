@@ -112,8 +112,6 @@ class MyRob(CRobLinkAngs):
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
         
-        # TODO: calculate path and save it
-        
         # Obtain checkpoints neighbours
         checkpoints = list(self.data.checkpoints.values())
         for checkpoint in checkpoints:
@@ -124,6 +122,7 @@ class MyRob(CRobLinkAngs):
                 neighbours = intersection.get_neighbours()
                 for neighbour in neighbours:
                     checkpoint.add_neighbour(neighbour)
+                    neighbour.add_neighbour(checkpoint)
 
             else:
                 
@@ -131,7 +130,7 @@ class MyRob(CRobLinkAngs):
                 y = coordinates[1]
 
                 # Check if 0y
-                if (x-1, y) in self.data.pmap or (x+1, y) in self.data.pmap:
+                if (x, y-1) in self.data.pmap or (x, y+1) in self.data.pmap:
 
                     intersections_at_y = [i for i in self.data.intersections.values() if i.get_x() == x]
 
@@ -144,13 +143,15 @@ class MyRob(CRobLinkAngs):
                     
                     if closest_intersection_at_down:
                         checkpoint.add_neighbour(closest_intersection_at_down)
+                        closest_intersection_at_down.add_neighbour(checkpoint)
 
                     if closest_intersection_at_up:
                         checkpoint.add_neighbour(closest_intersection_at_up)
+                        closest_intersection_at_up.add_neighbour(checkpoint)
 
 
                 # Check if 0x
-                elif (x, y-1) in self.data.pmap or (x, y+1) in self.data.pmap:
+                elif (x-1, y) in self.data.pmap or (x+1, y) in self.data.pmap:
                     
                     intersections_at_x = [i for i in self.data.intersections.values() if i.get_y() == y]
 
@@ -163,9 +164,11 @@ class MyRob(CRobLinkAngs):
                     
                     if closest_intersection_at_left:
                         checkpoint.add_neighbour(closest_intersection_at_left)
+                        closest_intersection_at_left.add_neighbour(checkpoint)
 
                     if closest_intersection_at_right:
                         checkpoint.add_neighbour(closest_intersection_at_right)
+                        closest_intersection_at_right.add_neighbour(checkpoint)
 
         path = self.pairwise(checkpoints + [checkpoints[0]])
         path_positions = []
