@@ -21,7 +21,7 @@ LOG_GROUND = True
 LOG_CHECKPOINTS = True
 LOG_MAP = True
 
-SPEED_OPTIMIZATIONS = False
+SPEED_OPTIMIZATIONS = True
 
 # TODO: Optimization for C2: When choosing new directions to take, choose the one that will lead with one step to a known intersection first, even if the path is unknown (might happen, see bottom-left corner of C2's maps)
 class Intention:

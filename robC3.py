@@ -208,7 +208,7 @@ class MyRob(CRobLinkAngs):
         
         with open(self.fname + ".path", "w") as file:
             for position in path_positions:
-                file.write(f'{position[0]} {position[1]}\n')
+                print(f'{position[0]} {position[1]}', file=file)
 
         self.finish()
 
