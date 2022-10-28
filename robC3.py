@@ -35,7 +35,19 @@ CELLCOLS=14
 class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
-        self.data = RobData()
+        
+        # TODO: Optimization for C3: Don't map the entire map, that's not necessary
+        # The map has been sufficiently traversed, no need to map the rest of the intersections
+        def sufficient_map(rdata: RobData):
+            pass
+
+        def exhausted_intersections(rdata: RobData):
+            return len(rdata.intersections) != 0 \
+                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
+
+        self.data = RobData(
+            finish_condition=exhausted_intersections
+        )
         self.intention = Wander()
         self.fname = fname
 

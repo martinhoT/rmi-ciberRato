@@ -241,12 +241,11 @@ class Wander(Intention):
         if (n_active == 0):
             return (0.0, 0.0), TurnBack(direction)
 
-        # TODO: count the number of times this happens?
         if self.line_sensor_discontinuity(measures.lineSensor):
+            rdata.discontinuities += 1
             return (-self.velocity, -self.velocity), None
 
         # Robot is on track
-        # TODO: watch out for flipped bits, might ruin everything
         left = measures.lineSensor[:5].count("1")
         right = measures.lineSensor[3:].count("1")
 
@@ -290,10 +289,8 @@ class Wander(Intention):
             
                 return (0.0, 0.0), CheckIntersectionForward(intersection_pos)
 
-            # All known intersections have been exhausted, which should mean that the entire map has been traversed
-            elif len(rdata.intersections) != 0 \
-                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values()):
-
+            # When the robot data suggests that the challenge has been finished
+            elif rdata.finished():
                 return (0.0, 0.0), Finish()
 
             # If the intersection is in the map
@@ -526,4 +523,5 @@ class Finish(Intention):
         super().__init__()
 
     def act(self, measures: CMeasures, rdata: RobData):
+        print('Number of noise discontinuities on lineSensors:', rdata.discontinuities)
         return (0.0, 0.0), None
