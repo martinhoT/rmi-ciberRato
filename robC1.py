@@ -26,8 +26,8 @@ CELLCOLS=14
 '''
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, rob_name, rob_id, angles, host, approach='base', lineSensorMemoryN=7):
-        CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
+    def __init__(self, robName, rob_id, angles, host, approach='base', lineSensorMemoryN=7):
+        CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.history = []
         self.memory = {
             'lineSensor': [ ['0']*7 ]*lineSensorMemoryN
@@ -276,7 +276,7 @@ class MyRob(CRobLinkAngs):
             self.readSensors()
 
             if self.measures.endLed:
-                print(self.rob_name + " exiting")
+                print(self.robName + " exiting")
                 quit()
 
             if state == 'stop' and self.measures.start:

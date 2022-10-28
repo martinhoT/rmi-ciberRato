@@ -1,11 +1,12 @@
-
+import itertools
 import sys
 from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
 
+from graph import Checkpoint
 from intention import Wander, Finish
-from utils import map_to_text
+from utils import map_to_text, wavefront_expansion
 from robData import RobData
 
 CELLROWS=7
@@ -32,8 +33,8 @@ CELLCOLS=14
 '''
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, rob_name, rob_id, angles, host, fname='robC2'):
-        CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
+    def __init__(self, robName, rob_id, angles, host, fname='robC2'):
+        CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.data = RobData()
         self.intention = Wander()
         self.fname = fname
@@ -47,6 +48,11 @@ class MyRob(CRobLinkAngs):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
 
+    def pairwise(self, iterable):
+        a, b = itertools.tee(iterable)
+        next(b, None)
+        return zip(a, b)
+
     def run(self):
         if self.status != 0:
             print("Connection refused or error")
@@ -59,7 +65,7 @@ class MyRob(CRobLinkAngs):
             self.readSensors()
 
             if self.measures.endLed:
-                print(self.rob_name + " exiting")
+                print(self.robName + " exiting")
                 quit()
 
             if state == 'stop' and self.measures.start:
@@ -107,7 +113,89 @@ class MyRob(CRobLinkAngs):
                 print(''.join(line), file=file)
         
         # TODO: calculate path and save it
-        pass
+        
+        # Obtain checkpoints neighbours
+        checkpoints = list(self.data.checkpoints.values())
+        for checkpoint in checkpoints:
+
+            coordinates = checkpoint.get_coordinates()
+            if coordinates in self.data.intersections:
+                intersection = self.data.intersections[coordinates]
+                neighbours = intersection.get_neighbours()
+                for neighbour in neighbours:
+                    checkpoint.add_neighbour(neighbour)
+
+            else:
+                
+                x = coordinates[0]
+                y = coordinates[1]
+
+                # Check if 0y
+                if (x-1, y) in self.data.pmap or (x+1, y) in self.data.pmap:
+
+                    intersections_at_y = [i for i in self.data.intersections.values() if i.get_x() == x]
+
+                    closest_intersection_at_down = min((i for i in intersections_at_y if i.get_y() < y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
+                    closest_intersection_at_up = min((i for i in intersections_at_y if i.get_y() > y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
+                    
+                    # Intersection has to be walkable
+                    closest_intersection_at_down = None if (x, y-1) not in self.data.pmap else closest_intersection_at_down
+                    closest_intersection_at_up = None if (x, y+1) not in self.data.pmap else closest_intersection_at_up
+                    
+                    if closest_intersection_at_down:
+                        checkpoint.add_neighbour(closest_intersection_at_down)
+
+                    if closest_intersection_at_up:
+                        checkpoint.add_neighbour(closest_intersection_at_up)
+
+
+                # Check if 0x
+                elif (x, y-1) in self.data.pmap or (x, y+1) in self.data.pmap:
+                    
+                    intersections_at_x = [i for i in self.data.intersections.values() if i.get_y() == y]
+
+                    closest_intersection_at_left = min((i for i in intersections_at_x if i.get_x() < x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
+                    closest_intersection_at_right = min((i for i in intersections_at_x if i.get_x() > x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
+                    
+                    # Intersection has to be walkable
+                    closest_intersection_at_left = None if (x-1, y) not in self.data.pmap else closest_intersection_at_left
+                    closest_intersection_at_right = None if (x+1, y) not in self.data.pmap else closest_intersection_at_right
+                    
+                    if closest_intersection_at_left:
+                        checkpoint.add_neighbour(closest_intersection_at_left)
+
+                    if closest_intersection_at_right:
+                        checkpoint.add_neighbour(closest_intersection_at_right)
+
+        path = self.pairwise(checkpoints + [checkpoints[0]])
+        path_positions = []
+        for start_node, end_node in path:
+            path_intersections = wavefront_expansion(start_node, key=lambda node: isinstance(node, Checkpoint) and node.get_coordinates() == end_node.get_coordinates())
+            
+            for start, end in self.pairwise(path_intersections):
+
+                distance_x = end.get_x() - start.get_x()
+                distance_y = end.get_y() - start.get_y()
+
+                if distance_x > 0:
+                    path_positions += [(start.get_x() + i, start.get_y()) for i in range(0, abs(distance_x), 2)]
+
+                elif distance_x < 0:
+                    path_positions += [(start.get_x() - i, start.get_y()) for i in range(0, abs(distance_x), 2)]
+
+                elif distance_y > 0:
+                    path_positions += [(start.get_x(), start.get_y() + i) for i in range(0, abs(distance_y), 2)]
+
+                elif distance_y < 0:
+                    path_positions += [(start.get_x(), start.get_y() - i) for i in range(0, abs(distance_y), 2)]
+
+        path_positions.append((0, 0))
+        
+        with open(self.fname + ".path", "w") as file:
+            for position in path_positions:
+                file.write(f'{position[0]} {position[1]}\n')
+
+        self.finish()
 
 class Map():
     def __init__(self, filename):
@@ -141,7 +229,7 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-fname = 'robC3'
+fname = 'solution'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:

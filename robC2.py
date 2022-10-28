@@ -32,8 +32,8 @@ CELLCOLS=14
 '''
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, rob_name, rob_id, angles, host, fname='robC2'):
-        CRobLinkAngs.__init__(self, rob_name, rob_id, angles, host)
+    def __init__(self, robName, rob_id, angles, host, fname='robC2'):
+        CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.data = RobData()
         self.intention = Wander()
         self.fname = fname
@@ -59,7 +59,7 @@ class MyRob(CRobLinkAngs):
             self.readSensors()
 
             if self.measures.endLed:
-                print(self.rob_name + " exiting")
+                print(self.robName + " exiting")
                 quit()
 
             if state == 'stop' and self.measures.start:
@@ -105,6 +105,8 @@ class MyRob(CRobLinkAngs):
         with open(self.fname + ".map", "w") as file:
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
+        
+        self.finish()
 
 class Map():
     def __init__(self, filename):
@@ -138,7 +140,7 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-fname = 'robC2'
+fname = 'solution'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:

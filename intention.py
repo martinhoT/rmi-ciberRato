@@ -1,10 +1,9 @@
-import math
 import random
 
 from os import system
 from typing import Dict, List, Tuple
 from croblink import CMeasures
-from graph import Intersection
+from graph import Checkpoint, Intersection, Node
 from robData import RobData
 
 from directions import Direction, left_direction, opposite_direction, right_direction
@@ -12,15 +11,15 @@ from utils import map_to_text, wavefront_expansion
 
 
 
-LOG_CLEAR = False
+LOG_CLEAR = True
 LOG_STARTING_POS = False
-LOG_INTENTION = False
-LOG_SENSORS = False
-LOG_INTERSECTIONS = True
+LOG_INTENTION = True
+LOG_SENSORS = True
+LOG_INTERSECTIONS = False
 LOG_CALCULATED_PATH = False
-LOG_GROUND = False
-LOG_CHECKPOINTS = False
-LOG_MAP = False
+LOG_GROUND = True
+LOG_CHECKPOINTS = True
+LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = False
 
@@ -127,12 +126,12 @@ class Intention:
             else -180 if measures.compass < -135
             else 0)
     
-    def update_neighbours(self, intersection: Intersection, rdata: RobData):
-        if rdata.previous_intersection and intersection != rdata.previous_intersection:
-            intersection.add_neighbour(rdata.previous_intersection)
-            rdata.previous_intersection.add_neighbour(intersection)
+    def update_neighbours(self, node: Node, rdata: RobData):
+        if rdata.previous_node and node != rdata.previous_node:
+            node.add_neighbour(rdata.previous_node)
+            rdata.previous_node.add_neighbour(node)
 
-        rdata.previous_intersection = intersection
+        rdata.previous_node = node
 
     def line_sensor_discontinuity(self, lineSensor: List[str]) -> bool:
         """Report whether the current line sensors are likely to be heavily disrupted by noise."""
@@ -146,7 +145,7 @@ class Intention:
         return groups > 3 and groups % 2 != 0
 
     @classmethod
-    def calculate_moves(cls, direction: Direction, path: List[Intersection]) -> List['Intention']:
+    def calculate_moves(cls, direction: Direction, path: List[Node]) -> List['Intention']:
         
         moves = []
         for i in range(len(path) - 1):
@@ -164,7 +163,7 @@ class Intention:
         return moves
         
     @classmethod
-    def get_direction_from_path(cls, start: Intersection, end: Intersection) -> Direction:
+    def get_direction_from_path(cls, start: Node, end: Node) -> Direction:
 
         # Same x
         if start.get_x() == end.get_x():
@@ -235,15 +234,16 @@ class Wander(Intention):
         position = self.round_pos(measures.x, measures.y, rdata.starting_position)
         if position not in rdata.pmap:
             rdata.pmap.append(position)
-        
+
         direction = self.getDirection(measures)
 
         # Robot is off track
         if (n_active == 0):
             return (0.0, 0.0), TurnBack(direction)
 
+        # TODO: count the number of times this happens?
         if self.line_sensor_discontinuity(measures.lineSensor):
-            return (0.0, 0.0), None
+            return (-self.velocity, -self.velocity), None
 
         # Robot is on track
         # TODO: watch out for flipped bits, might ruin everything
@@ -256,8 +256,12 @@ class Wander(Intention):
         rightTurn = right >= 3 and measures.lineSensor[-1] == "1"
 
         # Save checkpoint if one was found
-        if (measures.ground != -1):
-            rdata.checkpoints[measures.ground] = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+        if (measures.ground != -1) and measures.ground not in rdata.checkpoints:
+            checkpoint_pos = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+            checkpoint = Checkpoint(checkpoint_pos[0], checkpoint_pos[1], measures.ground)
+            rdata.checkpoints[measures.ground] = checkpoint
+            
+            # self.update_neighbours(checkpoint, rdata)
 
         # Possible intersection found
         if (leftTurn or rightTurn) and measures.lineSensor[3] == '1':
@@ -433,7 +437,7 @@ class TurnIntersection(Intention):
 
 class Rotate(Intention):
 
-    def __init__(self, starting_direction: Direction, end_direction: Direction=None, advancement_steps: int=4):
+    def __init__(self, starting_direction: Direction, end_direction: Direction=None, advancement_steps: int=3):
         super().__init__()
 
         self.end_direction = end_direction
