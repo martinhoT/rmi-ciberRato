@@ -254,7 +254,7 @@ class Wander(Intention):
 
         # Robot is off track
         if (n_active == 0):
-            return (0.0, 0.0), TurnBack(direction)
+            return (0.0, 0.0), TurnBack()
 
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
@@ -519,10 +519,8 @@ class MoveForward(Intention):
 
 class TurnBack(Intention):
 
-    def __init__(self, starting_direction: Direction):
+    def __init__(self):
         super().__init__()
-        self.starting_direction = starting_direction
-        self.count = 0
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         n_active = measures.lineSensor.count("1")

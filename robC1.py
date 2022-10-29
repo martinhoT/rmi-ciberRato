@@ -30,6 +30,8 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.history = []
+        self.time_since_last_backtrack = 100
+        self.force_backtrack_steps = 0
         self.prevLineSensor = [ None ] * 7
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
@@ -47,8 +49,11 @@ class MyRob(CRobLinkAngs):
 
         left_imbalance = left - right
 
-        return (0.15 * (1 - (left*1/2 if left_imbalance > 0 else 0)**3), 
-                0.15 * (1 - (right*1/2 if left_imbalance < 0 else 0)**3))
+        left_attenuation = 1 - (left/2 if left_imbalance > 0 else 0)**3
+        right_attenuation = 1 - (right/2 if left_imbalance < 0 else 0)**3
+        print(left_attenuation, right_attenuation)
+
+        return (0.15 * left_attenuation, 0.15 * right_attenuation)
 
     # Score: 5320 but robot gets temporarily stuck on backtracking (backtrack = 0.12)
     # Score: 5550, robot works perfectly (backtrack = 0.15)
@@ -63,14 +68,14 @@ class MyRob(CRobLinkAngs):
         self.prevLineSensor = self.measures.lineSensor.copy()
 
         print(self.measures.lineSensor, '->', lineSensor)
-        n_active = self.measures.lineSensor.count("1")
+        n_active = lineSensor.count("1")
 
         # Robot is off track
-        if (n_active == 0):
+        if (n_active <= 0): #or self.force_backtrack_steps > 0):
             
             print('Off track - Backtracking...')
 
-            backtrack = 0.15
+            backtrack = 0.1
             last_move = self.history[-1]
             if last_move == 0:
                 self.driveMotors(-backtrack, -backtrack)
@@ -79,28 +84,36 @@ class MyRob(CRobLinkAngs):
             else: 
                 self.driveMotors(backtrack, -backtrack)
             
+            # if self.time_since_last_backtrack < 5:
+            #     self.force_backtrack_steps = self.time_since_last_backtrack * 2
+
+            # self.time_since_last_backtrack = 0
+            # self.force_backtrack_steps = max(self.force_backtrack_steps - 1, 0)
+
             return
 
+        # self.time_since_last_backtrack += 1
+
         # Robot is on track
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
+        left = lineSensor[:3].count("1")
+        right = lineSensor[4:].count("1")
 
-        # if left - right == 2:
-        #     print('Rotate slowly left')
-        #     self.driveMotors(-0.0, +0.15)
-        #     self.history.append(1)
+        if left - right == 2:
+            print('Rotate slowly left')
+            self.driveMotors(-0.1, +0.15)
+            self.history.append(1)
 
-        if left - right > 1:
+        if left - right > 2:
             print('Rotate left')
             self.driveMotors(-0.15, +0.15)
             self.history.append(1)
 
-        # elif left - right == -2:
-        #     print('Rotate slowly right')
-        #     self.driveMotors(+0.15, -0.0)
-        #     self.history.append(1)
+        elif left - right == -2:
+            print('Rotate slowly right')
+            self.driveMotors(+0.15, -0.1)
+            self.history.append(1)
 
-        elif left - right < -1:
+        elif left - right < -2:
             print('Rotate right')
             self.driveMotors(+0.15, -0.15)
             self.history.append(2)
