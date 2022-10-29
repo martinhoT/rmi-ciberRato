@@ -40,8 +40,6 @@ class MyRob(CRobLinkAngs):
         # TODO: Optimization for C3: Don't map the entire map, that's not necessary
         # The map has been sufficiently traversed, no need to map the rest of the intersections
         def sufficient_map(rdata: RobData) -> bool:
-            print(len(rdata.intersections))
-            print(len(rdata.checkpoints))
             if len(rdata.intersections) == 0 \
                     or len(rdata.checkpoints) != int(self.nBeacons):
                 return False
@@ -52,34 +50,27 @@ class MyRob(CRobLinkAngs):
             # If not, consider the non-visited paths as being already visited
             unexplored_intersections = (i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0)
             for unexplored_intersection in unexplored_intersections:
-                print('Intersection', unexplored_intersection)
                 # Explore if manhattan distance to any other unexplored intersection is
                 # less than the actual distance to those intersections
                 worth_exploring = False
                 for other_unexplored_intersection in unexplored_intersections:
                     if other_unexplored_intersection != unexplored_intersection:
                         minimum_distance = manhattan_dist(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
-                        print('Minimum distance to', other_unexplored_intersection, '->', minimum_distance)
                         known_distance = wavefront_expansion(
                             unexplored_intersection,
                             key=lambda n: isinstance(n, Intersection) and n == other_unexplored_intersection,
                             max_distance=minimum_distance)
-                        print('Known distance to', other_unexplored_intersection, '->', known_distance)
                         
                         if not known_distance:
                             worth_exploring = True
                             break
 
-                print('Worth exploring:', worth_exploring)
 
                 if not worth_exploring:
                     # Consider the unexplored intersection has having already been explored
                     for path in unexplored_intersection.get_possible_paths():
                         unexplored_intersection.add_visited_path(path)
             
-            print([i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) != 0])
-            print()
-
             return all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
 
         self.data = RobData(
