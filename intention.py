@@ -7,20 +7,20 @@ from graph import Checkpoint, Intersection, Node
 from robData import RobData
 
 from directions import Direction, left_direction, opposite_direction, right_direction
-from utils import map_to_text, wavefront_expansion
+from utils import Navigator, map_to_text, wavefront_expansion
 
 
-
-LOG_CLEAR = False
-LOG_STARTING_POS = False
+LOG = True
+LOG_CLEAR = True
+LOG_STARTING_POS = True
 LOG_INTENTION = True
 LOG_SENSORS = True
 LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = False
-LOG_GROUND = True
+LOG_GROUND = False
 LOG_CHECKPOINTS = True
 LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
-LOG_MAP = False
+LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
 
@@ -32,61 +32,37 @@ class Intention:
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         raise NotImplementedError()
 
-    # Obtain orientation of robot in the map
-    def getDirection(self, measures: CMeasures):
-        if measures.compass >= 45 and measures.compass <= 135:
-            return Direction.N
-        elif measures.compass < 45 and measures.compass > -45:
-            return Direction.E
-        elif measures.compass <= -45 and measures.compass >= -135:
-            return Direction.S
-        else:
-            return Direction.W
-    
-    def round_pos(self, x: float, y: float, starting_position: Tuple[float, float]):
-        # Assumed that the robot is still in the starting position and hasn't updated it
-        if not starting_position:
-            return 0, 0
-        # Works diffrently for negative numbers!
-        # return math.floor(x-starting_position[0] + 0.5), math.floor(y-starting_position[1] + 0.5)
-        return round(x-starting_position[0]), round(y-starting_position[1])
-
-    def round_pos_to_intersection(self, x: float, y: float, starting_position: Tuple[float, float]):
-        if not starting_position:
-            return 0, 0
-        return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
-
     def log_measured(self, measures: CMeasures, rdata: RobData):
-        if LOG_CLEAR:
-            system('clear')
-        if LOG_STARTING_POS:
-            print(rdata.starting_position)
-        if LOG_INTENTION:
-            print(self.__class__.__name__)
-        if LOG_SENSORS:
-            print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({self.round_pos(measures.x, measures.y, rdata.starting_position)})')
-        if LOG_INTERSECTIONS:
-            print('Intersections:')
-            for position, intersection in rdata.intersections.items():
-                not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
-                print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
-                # if not_visited:
-                    # print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
-        if LOG_CALCULATED_PATH:
-            print('Calculated Path:')
-            print('Robot Position:', self.round_pos(measures.x, measures.y, rdata.starting_position))
-            print(rdata.path)
-            print(rdata.intersections_intentions)
-        if LOG_GROUND:
-            print('Ground:', measures.ground)
-        if LOG_CHECKPOINTS:
-            print('Checkpoints:', rdata.checkpoints)
-        if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
-            print('Distance to known intersection ahead:', Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(
-                self.round_pos(measures.x, measures.y, rdata.starting_position), self.getDirection(measures), rdata.intersections, rdata.pmap))
-        if LOG_MAP and rdata.pmap:
-            for line in map_to_text(list(rdata.pmap)):
-                print(''.join(line))
+        if LOG:
+            if LOG_CLEAR:
+                system('clear')
+            if LOG_STARTING_POS:
+                print(rdata.starting_position)
+            if LOG_INTENTION:
+                print(self.__class__.__name__)
+            if LOG_SENSORS:
+                print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({Navigator.round_pos(measures.x, measures.y, rdata.starting_position)})')
+            if LOG_INTERSECTIONS:
+                print('Intersections:')
+                for position, intersection in rdata.intersections.items():
+                    not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
+                    if not_visited:
+                        print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
+            if LOG_CALCULATED_PATH:
+                print('Calculated Path:')
+                print('Robot Position:', Navigator.round_pos(measures.x, measures.y, rdata.starting_position))
+                print(rdata.path)
+                print(rdata.intersections_intentions)
+            if LOG_GROUND:
+                print('Ground:', measures.ground)
+            if LOG_CHECKPOINTS:
+                print('Checkpoints:', rdata.checkpoints)
+            if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
+                print('Distance to known intersection ahead:', Navigator.get_walkable_distance_to_closest_intersection_in_front_of_pos(
+                    Navigator.round_pos(measures.x, measures.y, rdata.starting_position), Navigator.get_direction(measures.compass), rdata.intersections, rdata.pmap))
+            if LOG_MAP and rdata.pmap:
+                for line in map_to_text(rdata.pmap):
+                    print(''.join(line))
 
     def safeguard(self, measures: CMeasures):
         center_id = 0
@@ -108,9 +84,8 @@ class Intention:
         return (self.velocity, self.velocity)
 
     # The path is either a vertical or horizontal line
-    # Only works with RobC2 since the compass is used
     def follow_path(self, measures: CMeasures) -> Tuple[int, int]:
-        angle_to_track = self.get_angle_to_track(measures)
+        angle_to_track = Navigator.get_angle_to_track(measures.compass)
 
         left = measures.lineSensor[:3].count("1")
         right = measures.lineSensor[4:].count("1")
@@ -119,15 +94,6 @@ class Intention:
 
         return (self.velocity * (1 - (-angle_to_track/45) - (left*1/3 if left_imbalance > 0 else 0)), 
                 self.velocity * (1 - (angle_to_track/45) - (right*1/3 if left_imbalance < 0 else 0)))
-
-    def get_angle_to_track(self, measures: CMeasures):
-        direction = self.getDirection(measures)
-        return measures.compass - \
-                 (90 if direction == Direction.N
-            else -90 if direction == Direction.S
-            else  180 if measures.compass > 135
-            else -180 if measures.compass < -135
-            else 0)
     
     def update_neighbours(self, node: Node, rdata: RobData):
         if rdata.previous_node and node != rdata.previous_node:
@@ -147,13 +113,12 @@ class Intention:
         
         return groups > 3 and groups % 2 != 0
 
-    @classmethod
-    def calculate_moves(cls, direction: Direction, path: List[Node]) -> List['Intention']:
+    def calculate_moves(self, direction: Direction, path: List[Node]) -> List['Intention']:
         
         moves = []
         for i in range(len(path) - 1):
 
-            new_direction = cls.get_direction_from_path(path[i], path[i+1])
+            new_direction = Navigator.get_direction_from_path(path[i], path[i+1])
 
             if direction == new_direction:
                 move = MoveForward()
@@ -165,72 +130,6 @@ class Intention:
 
         return moves
         
-    @classmethod
-    def get_direction_from_path(cls, start: Node, end: Node) -> Direction:
-
-        # Same x
-        if start.get_x() == end.get_x():
-            if end.get_y() > start.get_y():
-                return Direction.N
-            else:
-                return Direction.S
-        
-        # Same y
-        else:
-            if end.get_x() > start.get_x():
-                return Direction.E
-            else:
-                return Direction.W
-
-    @classmethod
-    def get_distance_to_closest_intersection_in_front_of_pos(cls,
-            position: Tuple[int, int],
-            direction: Direction,
-            intersections: Dict[Tuple[int, int], Intersection]) -> int:
-        
-        # If the intersection in front of me is far away, then speed up
-        intersection_in_front_distance = {
-            Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
-            Direction.W: lambda i, p: p[0] - i[0] if i[1] == p[1] else -1,
-            Direction.N: lambda i, p: i[1] - p[1] if i[0] == p[0] else -1,
-            Direction.S: lambda i, p: p[1] - i[1] if i[0] == p[0] else -1
-        }[direction]
-
-        distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in intersections
-            if intersection_in_front_distance(intersection, position) > 0]
-
-        if distance_of_intersections_in_front_of_me:
-            return min(distance_of_intersections_in_front_of_me)
-        
-        return None
-
-    @classmethod
-    def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,
-            position: Tuple[int, int],
-            direction: Direction,
-            intersections: Dict[Tuple[int, int], Intersection],
-            pmap: List[Tuple[int, int]]):
-
-        closest_distance = cls.get_distance_to_closest_intersection_in_front_of_pos(
-            position, direction, intersections)
-        
-        if closest_distance:
-
-            intersection_step = {
-                Direction.E: lambda i, n: (i[0] + n, i[1]),
-                Direction.W: lambda i, n: (i[0] - n, i[1]),
-                Direction.N: lambda i, n: (i[0], i[1] + n),
-                Direction.S: lambda i, n: (i[0], i[1] - n)
-            }[direction]
-
-            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance)}
-            
-            # Should reach that intersection in a known straight path from this position
-            if len(positions_to_be_covered - set(pmap)) == 0:
-                return closest_distance
-        
-        return None
-
     def __str__(self): return self.__class__.__name__
     def __repr__(self): return str(self)
 
@@ -240,21 +139,18 @@ class Wander(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        if not rdata.starting_position:
-            rdata.starting_position = (measures.x, measures.y)
-
         n_active = measures.lineSensor.count("1")
 
         # Obtain position of robot in the map
-        position = self.round_pos(measures.x, measures.y, rdata.starting_position)
+        position = Navigator.round_pos(measures.x, measures.y, rdata.starting_position)
         if position not in rdata.pmap:
             rdata.pmap.append(position)
 
-        direction = self.getDirection(measures)
+        direction = Navigator.get_direction(measures.compass)
 
         # Robot is off track
         if (n_active == 0):
-            return (0.0, 0.0), TurnBack()
+            return (0.0, 0.0), Rotate(direction, opposite_direction(direction), at_intersection=False)
 
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
@@ -271,7 +167,7 @@ class Wander(Intention):
 
         # Save checkpoint if one was found
         if (measures.ground != -1) and measures.ground not in rdata.checkpoints:
-            checkpoint_pos = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+            checkpoint_pos = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
             checkpoint = Checkpoint(checkpoint_pos[0], checkpoint_pos[1], measures.ground)
             rdata.checkpoints[measures.ground] = checkpoint
             
@@ -281,7 +177,7 @@ class Wander(Intention):
         if (leftTurn or rightTurn) and measures.lineSensor[3] == '1':
 
             # Adjust position to the closest possible intersection
-            intersection_pos = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+            intersection_pos = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
 
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
@@ -289,18 +185,19 @@ class Wander(Intention):
                 # state.intersections[position] = Intersection()
                 intersection = Intersection(intersection_pos[0], intersection_pos[1])
                 rdata.intersections[intersection_pos] = intersection
-                
-                self.update_neighbours(intersection, rdata)
 
                 # Add current path to intersection
                 intersection.add_path(opposite_direction(direction))
-                intersection.add_visited_path(opposite_direction(direction))
+                if rdata.previous_node:
+                    intersection.add_visited_path(opposite_direction(direction))
 
                 if leftTurn:
                     intersection.add_path(left_direction(direction))
 
                 if rightTurn:
                     intersection.add_path(right_direction(direction))
+
+                self.update_neighbours(intersection, rdata)
             
                 return (0.0, 0.0), CheckIntersectionForward(intersection_pos)
 
@@ -341,7 +238,7 @@ class Wander(Intention):
                         key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()))
 
                     if path_to_closest_intersection:
-                        rdata.intersections_intentions = Intention.calculate_moves(direction, path_to_closest_intersection)
+                        rdata.intersections_intentions = self.calculate_moves(direction, path_to_closest_intersection)
                         rdata.path = path_to_closest_intersection[1:]
                         return (0.0, 0.0), rdata.intersections_intentions.pop(0)
                         
@@ -360,7 +257,7 @@ class Wander(Intention):
         
         extra_velocity = 0
         if SPEED_OPTIMIZATIONS:
-            closest_distance = Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(
+            closest_distance = Navigator.get_walkable_distance_to_closest_intersection_in_front_of_pos(
                 position, direction, rdata.intersections, rdata.pmap)
             if closest_distance:
                 x = closest_distance/4
@@ -377,7 +274,7 @@ class Wander(Intention):
 
 class CheckIntersectionForward(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], test_steps=5):
+    def __init__(self, intersection_pos: Tuple[int, int], test_steps: int=5):
         super().__init__()
         self.intersection_pos = intersection_pos
         self.test_steps = test_steps        
@@ -408,14 +305,14 @@ class CheckIntersectionForwardBacktrack(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        direction = self.getDirection(measures)
+        direction = Navigator.get_direction(measures.compass)
 
         # If the robot is back at the intersection
         if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
             
             if self.has_intersection_forward:
 
-                intersection = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+                intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
                 rdata.intersections[intersection].add_path(direction)
 
             return (self.velocity, self.velocity), TurnIntersection()
@@ -428,13 +325,13 @@ class TurnIntersection(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        intersection_pos = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-        direction = self.getDirection(measures)
+        intersection_pos = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+        direction = Navigator.get_direction(measures.compass)
         intersection = rdata.intersections[intersection_pos]
 
         non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
         for available in non_visited_paths:
-            if Intention.get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, direction, rdata.intersections) == 2:
+            if Navigator.get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, direction, rdata.intersections) == 2:
                 break
 
         # If didn't find any close intersection, choose last available path
@@ -452,12 +349,13 @@ class TurnIntersection(Intention):
 
 class Rotate(Intention):
 
-    def __init__(self, starting_direction: Direction, end_direction: Direction=None, advancement_steps: int=3):
+    def __init__(self, starting_direction: Direction, end_direction: Direction, advancement_steps: int=3, at_intersection: bool=True):
         super().__init__()
 
         self.end_direction = end_direction
         self.left = left_direction(starting_direction) == end_direction
         self.advancement_steps = advancement_steps
+        self.at_intersection = at_intersection
 
         self.count = 0
     
@@ -472,12 +370,13 @@ class Rotate(Intention):
             right_motor = self.velocity if self.left else -self.velocity
 
         next_intention = None
-        if self.getDirection(measures) == self.end_direction and abs(self.get_angle_to_track(measures)) < 30:
+        if Navigator.get_direction(measures.compass) == self.end_direction and abs(Navigator.get_angle_to_track(measures.compass)) < 30:
 
             # Update visited path
-            direction = self.getDirection(measures)
-            intersection = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-            rdata.intersections[intersection].add_visited_path(direction)
+            if self.at_intersection:
+                direction = Navigator.get_direction(measures.compass)
+                intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+                rdata.intersections[intersection].add_visited_path(direction)
 
             next_intention = Wander()
         
@@ -493,8 +392,8 @@ class MoveForward(Intention):
         self.log_measured(measures, rdata)
 
         # Update visited path
-        direction = self.getDirection(measures)        
-        intersection = self.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+        direction = Navigator.get_direction(measures.compass)        
+        intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
         
         rdata.intersections[intersection].add_visited_path(direction)
 
@@ -514,22 +413,6 @@ class MoveForward(Intention):
         return (left_motor, right_motor), next_intention
     
     def __str__(self): return 'Move forward'
-    def __repr__(self): return str(self)
-
-
-class TurnBack(Intention):
-
-    def __init__(self):
-        super().__init__()
-
-    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
-        n_active = measures.lineSensor.count("1")
-
-        next_intention = Wander() if n_active != 0 else None
-        
-        return (self.velocity, -self.velocity), next_intention
-    
-    def __str__(self): return 'Turn back'
     def __repr__(self): return str(self)
 
 

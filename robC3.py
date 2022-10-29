@@ -3,10 +3,11 @@ import sys
 from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
+from directions import opposite_direction
 
-from graph import Checkpoint
-from intention import Wander, Finish
-from utils import map_to_text, wavefront_expansion
+from graph import Checkpoint, Intersection
+from intention import Rotate, Finish
+from utils import Navigator, map_to_text, wavefront_expansion
 from robData import RobData
 
 CELLROWS=7
@@ -36,13 +37,13 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
-        print('Number of beacons:', self.nBeacons)
-
         # TODO: Optimization for C3: Don't map the entire map, that's not necessary
         # The map has been sufficiently traversed, no need to map the rest of the intersections
         def sufficient_map(rdata: RobData) -> bool:
-            if len(rdata.intersections) != 0 \
-                    or len(rdata.checkpoints) != self.nBeacons:
+            print(len(rdata.intersections))
+            print(len(rdata.checkpoints))
+            if len(rdata.intersections) == 0 \
+                    or len(rdata.checkpoints) != int(self.nBeacons):
                 return False
 
             manhattan_dist = lambda t1, t2: abs(t1[0]-t2[0]) + abs(t1[1]-t2[1])
@@ -51,24 +52,40 @@ class MyRob(CRobLinkAngs):
             # If not, consider the non-visited paths as being already visited
             unexplored_intersections = (i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0)
             for unexplored_intersection in unexplored_intersections:
+                print('Intersection', unexplored_intersection)
                 # Explore if manhattan distance to any other unexplored intersection is
                 # less than the actual distance to those intersections
-                worth_exploring = ...
+                worth_exploring = False
+                for other_unexplored_intersection in unexplored_intersections:
+                    if other_unexplored_intersection != unexplored_intersection:
+                        minimum_distance = manhattan_dist(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
+                        print('Minimum distance to', other_unexplored_intersection, '->', minimum_distance)
+                        known_distance = wavefront_expansion(
+                            unexplored_intersection,
+                            key=lambda n: isinstance(n, Intersection) and n == other_unexplored_intersection,
+                            max_distance=minimum_distance)
+                        print('Known distance to', other_unexplored_intersection, '->', known_distance)
+                        
+                        if not known_distance:
+                            worth_exploring = True
+                            break
+
+                print('Worth exploring:', worth_exploring)
+
                 if not worth_exploring:
                     # Consider the unexplored intersection has having already been explored
                     for path in unexplored_intersection.get_possible_paths():
                         unexplored_intersection.add_visited_path(path)
             
+            print([i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) != 0])
+            print()
+
             return all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
 
-        def exhausted_intersections(rdata: RobData) -> bool:
-            return len(rdata.intersections) != 0 \
-                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
-
         self.data = RobData(
-            finish_condition=exhausted_intersections
+            finish_condition=sufficient_map
         )
-        self.intention = Wander()
+        self.intention = None
         self.fname = fname
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
@@ -95,6 +112,16 @@ class MyRob(CRobLinkAngs):
 
         while True:
             self.readSensors()
+
+            # Intention initialization that requires sensor measures
+            if not self.intention:
+                self.data.starting_position = (self.measures.x, self.measures.y)
+                direction = Navigator.get_direction(self.measures.compass)
+                self.intention = Rotate(
+                    starting_direction=direction,
+                    end_direction=opposite_direction(direction),
+                    advancement_steps=10,
+                    at_intersection=False)
 
             if self.measures.endLed:
                 print(self.robName + " exiting")
@@ -143,9 +170,6 @@ class MyRob(CRobLinkAngs):
         with open(self.fname + ".map", "w") as file:
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
-        
-        # List to keep track of all possible paths
-        all_path_positions = []
 
         # Obtain checkpoints neighbours
         checkpoints = list(self.data.checkpoints.values())
@@ -204,6 +228,9 @@ class MyRob(CRobLinkAngs):
                     if closest_intersection_at_right:
                         checkpoint.add_neighbour(closest_intersection_at_right)
                         closest_intersection_at_right.add_neighbour(checkpoint)
+
+        # List to keep track of all possible paths
+        all_path_positions = []
 
         for sequence in itertools.permutations(checkpoints[1:]):
             sequence = [checkpoints[0]] + list(sequence) + [checkpoints[0]]

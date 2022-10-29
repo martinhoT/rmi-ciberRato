@@ -43,7 +43,7 @@ class MyRob(CRobLinkAngs):
         self.data = RobData(
             finish_condition=exhausted_intersections
         )
-        self.intention = Wander()
+        self.intention = None
         self.fname = fname
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
@@ -65,6 +65,11 @@ class MyRob(CRobLinkAngs):
 
         while True:
             self.readSensors()
+
+            # Initial intention setup
+            if not self.intention:
+                self.data.starting_position = (self.measures.x, self.measures.y)
+                self.intention = Wander()
 
             if self.measures.endLed:
                 print(self.robName + " exiting")

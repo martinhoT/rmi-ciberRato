@@ -17,8 +17,3 @@ def left_direction(direction: Direction) -> Direction:
 
 def right_direction(direction: Direction) -> Direction:
     return DIRECTIONS_ARRAY[(direction.value + 1) % 4]
-
-# Left
-# DIRECTIONS_ARRAY[ (direction.value - 1) % 4 ]
-# Right
-# DIRECTIONS_ARRAY[ (direction.value + 1) % 4 ]
