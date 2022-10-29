@@ -36,17 +36,26 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
+        print('Number of beacons:', self.nBeacons)
+
         # TODO: Optimization for C3: Don't map the entire map, that's not necessary
         # The map has been sufficiently traversed, no need to map the rest of the intersections
         def sufficient_map(rdata: RobData) -> bool:
-            if len(rdata.intersections) != 0:
+            if len(rdata.intersections) != 0 \
+                    or len(rdata.checkpoints) != self.nBeacons:
                 return False
 
-            # For every unexplored intersection, check if it's worth it to explore it. If not, consider the non-visited paths as being already visited
+            manhattan_dist = lambda t1, t2: abs(t1[0]-t2[0]) + abs(t1[1]-t2[1])
+
+            # For every unexplored intersection, check if it's worth it to explore it
+            # If not, consider the non-visited paths as being already visited
             unexplored_intersections = (i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0)
             for unexplored_intersection in unexplored_intersections:
+                # Explore if manhattan distance to any other unexplored intersection is
+                # less than the actual distance to those intersections
                 worth_exploring = ...
                 if not worth_exploring:
+                    # Consider the unexplored intersection has having already been explored
                     for path in unexplored_intersection.get_possible_paths():
                         unexplored_intersection.add_visited_path(path)
             
@@ -135,6 +144,9 @@ class MyRob(CRobLinkAngs):
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
         
+        # List to keep track of all possible paths
+        all_path_positions = []
+
         # Obtain checkpoints neighbours
         checkpoints = list(self.data.checkpoints.values())
         for checkpoint in checkpoints:
@@ -193,32 +205,41 @@ class MyRob(CRobLinkAngs):
                         checkpoint.add_neighbour(closest_intersection_at_right)
                         closest_intersection_at_right.add_neighbour(checkpoint)
 
-        path = self.pairwise(checkpoints + [checkpoints[0]])
-        path_positions = []
-        for start_node, end_node in path:
-            path_intersections = wavefront_expansion(start_node, key=lambda node: isinstance(node, Checkpoint) and node.get_coordinates() == end_node.get_coordinates())
+        for sequence in itertools.permutations(checkpoints[1:]):
+            sequence = [checkpoints[0]] + list(sequence) + [checkpoints[0]]
+
+            # path = self.pairwise(checkpoints + [checkpoints[0]])
+            path = self.pairwise(sequence)
+            path_positions = []
             
-            for start, end in self.pairwise(path_intersections):
+            for start_node, end_node in path:
+                path_intersections = wavefront_expansion(start_node, key=lambda node: isinstance(node, Checkpoint) and node.get_coordinates() == end_node.get_coordinates())
+                
+                for start, end in self.pairwise(path_intersections):
 
-                distance_x = end.get_x() - start.get_x()
-                distance_y = end.get_y() - start.get_y()
+                    distance_x = end.get_x() - start.get_x()
+                    distance_y = end.get_y() - start.get_y()
 
-                if distance_x > 0:
-                    path_positions += [(start.get_x() + i, start.get_y()) for i in range(0, abs(distance_x), 2)]
+                    if distance_x > 0:
+                        path_positions += [(start.get_x() + i, start.get_y()) for i in range(0, abs(distance_x), 2)]
 
-                elif distance_x < 0:
-                    path_positions += [(start.get_x() - i, start.get_y()) for i in range(0, abs(distance_x), 2)]
+                    elif distance_x < 0:
+                        path_positions += [(start.get_x() - i, start.get_y()) for i in range(0, abs(distance_x), 2)]
 
-                elif distance_y > 0:
-                    path_positions += [(start.get_x(), start.get_y() + i) for i in range(0, abs(distance_y), 2)]
+                    elif distance_y > 0:
+                        path_positions += [(start.get_x(), start.get_y() + i) for i in range(0, abs(distance_y), 2)]
 
-                elif distance_y < 0:
-                    path_positions += [(start.get_x(), start.get_y() - i) for i in range(0, abs(distance_y), 2)]
+                    elif distance_y < 0:
+                        path_positions += [(start.get_x(), start.get_y() - i) for i in range(0, abs(distance_y), 2)]
 
-        path_positions.append((0, 0))
+            path_positions.append((0, 0))
+
+            all_path_positions.append(path_positions)
+
+        smallest_path_positions = min(all_path_positions, key=len)
         
         with open(self.fname + ".path", "w") as file:
-            for position in path_positions:
+            for position in smallest_path_positions:
                 print(f'{position[0]} {position[1]}', file=file)
 
         self.finish()

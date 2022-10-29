@@ -14,17 +14,16 @@ from utils import map_to_text, wavefront_expansion
 LOG_CLEAR = True
 LOG_STARTING_POS = False
 LOG_INTENTION = True
-LOG_SENSORS = True
-LOG_INTERSECTIONS = False
+LOG_SENSORS = False
+LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = False
 LOG_GROUND = True
 LOG_CHECKPOINTS = True
-LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
 LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
 
-# TODO: Optimization for C2: When choosing new directions to take, choose the one that will lead with one step to a known intersection first, even if the path is unknown (might happen, see bottom-left corner of C2's maps)
 class Intention:
 
     def __init__(self):
@@ -184,12 +183,11 @@ class Intention:
                 return Direction.W
 
     @classmethod
-    def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,
+    def get_distance_to_closest_intersection_in_front_of_pos(cls,
             position: Tuple[int, int],
             direction: Direction,
-            intersections: Dict[Intersection, Direction],
-            pmap: List[Tuple[int, int]]):
-
+            intersections: Dict[Tuple[int, int], Intersection]) -> int:
+        
         # If the intersection in front of me is far away, then speed up
         intersection_in_front_distance = {
             Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
@@ -202,9 +200,22 @@ class Intention:
             if intersection_in_front_distance(intersection, position) > 0]
 
         if distance_of_intersections_in_front_of_me:
-            # There needs to be straight path to the intersection
-            closest_distance = min(distance_of_intersections_in_front_of_me)
-            
+            return min(distance_of_intersections_in_front_of_me)
+        
+        return None
+
+    @classmethod
+    def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,
+            position: Tuple[int, int],
+            direction: Direction,
+            intersections: Dict[Tuple[int, int], Intersection],
+            pmap: List[Tuple[int, int]]):
+
+        closest_distance = cls.get_distance_to_closest_intersection_in_front_of_pos(
+            position, direction, intersections)
+        
+        if closest_distance:
+
             intersection_step = {
                 Direction.E: lambda i, n: (i[0] + n, i[1]),
                 Direction.W: lambda i, n: (i[0] - n, i[1]),
@@ -422,8 +433,11 @@ class TurnIntersection(Intention):
         intersection = rdata.intersections[intersection_pos]
 
         non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
-        
-        available = non_visited_paths.pop()
+        for available in non_visited_paths:
+            if Intention.get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, direction, rdata.intersections) == 2:
+                break
+
+        # If didn't find any close intersection, choose last available path
         intersection.add_visited_path(available)
 
         next_intention = None
