@@ -2,6 +2,7 @@
 from lib2to3.pgen2.token import LEFTSHIFT
 from shutil import SpecialFileError
 import sys
+from typing import Tuple
 from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
@@ -26,14 +27,10 @@ CELLCOLS=14
 '''
 
 class MyRob(CRobLinkAngs):
-    def __init__(self, robName, rob_id, angles, host, approach='base', lineSensorMemoryN=7):
+    def __init__(self, robName, rob_id, angles, host):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.history = []
-        self.memory = {
-            'lineSensor': [ ['0']*7 ]*lineSensorMemoryN
-        }
-        self.lineSensorMemoryN = lineSensorMemoryN
-        self.wander = self._wanderApproaches[approach]
+        self.prevLineSensor = [ None ] * 7
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
     # to know if there is a wall on top of cell(i,j) (i in 0..5), check if the value of labMap[i*2+1][j*2] is space or not
@@ -44,162 +41,28 @@ class MyRob(CRobLinkAngs):
         for l in reversed(self.labMap):
             print(''.join([str(l) for l in l]))
 
-    # Score: 100 points
-    def wanderBasic(self):
-        print('Line sensors:', self.measures.lineSensor)
+    def follow_path(self, lineSensor) -> Tuple[float, float]:
+        left = lineSensor[:3].count("1")
+        right = lineSensor[4:].count("1")
 
-        if self.measures.lineSensor[-1] == '1':
-            print('Rotate right')
-            self.driveMotors(0.1, -0.1)
-        elif self.measures.lineSensor[0] == '1':
-            print('Rotate left')
-            self.driveMotors(-0.1, 0.1)
-        elif self.measures.lineSensor[-2] == '1':
-            print('Rotate slowly right')
-            self.driveMotors(0.1, 0.0)
-        elif self.measures.lineSensor[1] == '1':
-            print('Rotate slowly left')
-            self.driveMotors(0.0, 0.1)
-        else:
-            print('Go')
-            self.driveMotors(0.1, 0.1)
+        left_imbalance = left - right
 
-    # Score: ~3570
-    def wanderByLineSensorMemory(self):
-        """
-        Wander using the last X `lineSensor` values. These values are only used to calculate the desired turn speed.
-
-        Example for the last 3 `lineSensor` values, from most recent to least recent:
-        ```
-        [
-            [0,  0,  1,  1,  1,  1,  1],
-            [0,  0,  1,  1,  1,  0,  0],
-            [0,  0,  1,  1,  1,  0,  0],
-        ]
-        ```
-        This 3x7 matrix is converted to a single aggregate list, by treating each column as a binary number.
-        This results in the most recent values having greater impact in the current turn speed than older ones.
-
-        The aggregate list is used to determine the desired turn speed to the left and to the right.
-        """
-
-        if any(ls == '1' for ls in self.measures.lineSensor):
-            self.memory['lineSensor'] = [self.measures.lineSensor] + self.memory['lineSensor'][:-1]
-        else:
-            print('OFF TRACK')
-            # Implement this?
-            # was_off_track = True
-        
-        lineSensorAgg = [int(''.join(list(bins)), 2) for bins in zip(*self.memory['lineSensor'])]
-
-        print('Line sensors:', self.measures.lineSensor, 'Agg:', lineSensorAgg, 'Ground:', self.measures.ground)
-
-        # Ideally, the turn scales are < 1.0
-        maxTurnScale = 14 * (2**self.lineSensorMemoryN-1)
-        leftTurnScale = sum(ls * ((i+1)**2) for i, ls in enumerate(lineSensorAgg[:3][::-1])) / maxTurnScale
-        rightTurnScale = sum(ls * ((i+1)**2) for i, ls in enumerate(lineSensorAgg[4:])) / maxTurnScale
-
-        print('LeftTurnScale:', leftTurnScale, 'RightTurnScale', rightTurnScale)
-
-        leftTurnScale = leftTurnScale if leftTurnScale > 0.1 else 0.0
-        rightTurnScale = rightTurnScale if rightTurnScale > 0.1 else 0.0
-        action = (0.10 - 0.20*leftTurnScale, 0.10 - 0.20*rightTurnScale)
-        self.driveMotors(*action)
-        if leftTurnScale > rightTurnScale:
-            print('Rotate left', (leftTurnScale, rightTurnScale))
-        elif rightTurnScale > leftTurnScale:
-            print('Rotate right', (leftTurnScale, rightTurnScale))
-
-        print()
-
-    # Score: (At least) 100 points
-    def wanderBase(self):
-
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
-        
-        if left - right > 0:
-            print('Rotate left')
-            self.driveMotors(-0.03, +0.03)
-
-        elif left - right < 0:
-            print('Rotate right')
-            self.driveMotors(+0.03, -0.03)
-
-        else: 
-            print('Go')
-            action = self.safeguard()
-            self.driveMotors(action[0], action[1])
-
-    def wanderWithRotationHistory(self):
-
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
-
-        print(self.measures.lineSensor)
-
-        # Check history
-        if self.history:
-            action = self.history.pop()
-            print('Rotate (' + str(action[0]) + ", " + str(action[1]) + ")")
-            self.driveMotors(action[0], action[1])
-
-        elif right == 3:
-            print('Rotate right')
-            self.driveMotors(0.15, 0.15)
-            self.history = [(0.15, 0.15)] + [(0.15, -0.15)]*5 + [(0.15, 0.15)]
-        
-        elif left == 3:
-            print('Rotate left')
-            self.driveMotors(0.15, 0.15)
-            self.history = [(0.15, 0.15)] + [(-0.15, 0.15)]*5 + [(0.15, 0.15)]
-
-        else: 
-            self.wanderBase()
-        
-    # Score: 3720 with self.driveMotors(-0.05, +0.05)
-    # Score: 3690 with self.driveMotors(-0.03, +0.03)
-    # Score: 3700 with self.driveMotors(-0.1, +0.1)
-    def wanderBaseImproved(self):
-
-        print(self.measures.lineSensor)
-
-        center = self.measures.lineSensor[2:5].count("1")
-        left = self.measures.lineSensor[:3].count("1")
-        right = self.measures.lineSensor[4:].count("1")
-
-        if left - right > 1:
-            print('Rotate left')
-            self.driveMotors(-0.15, +0.15)
-
-        # If centered, ignore small deviations to the left
-        elif left - right > 0 and center < 3:
-            print('Rotate slightly to the left')
-            self.driveMotors(-0.05, +0.05)
-
-        elif left - right < -1:
-            print('Rotate right')
-            self.driveMotors(+0.15, -0.15)
-
-        # If centered, ignore small deviations to the right
-        elif left - right < 0 and center < 3:
-            print('Rotate slightly to the right')
-            self.driveMotors(+0.05, -0.05)
-
-        else: 
-            print('Go')
-            action = self.safeguard()
-            self.driveMotors(action[0], action[1])
+        return (0.15 * (1 - (left*1/2 if left_imbalance > 0 else 0)**3), 
+                0.15 * (1 - (right*1/2 if left_imbalance < 0 else 0)**3))
 
     # Score: 5320 but robot gets temporarily stuck on backtracking (backtrack = 0.12)
     # Score: 5550, robot works perfectly (backtrack = 0.15)
-    def wanderWithBacktracking(self):
+    def wander(self):
 
         # self.history = 0 -> Straight
         # self.history = 1 -> Left
         # self.history = 2 -> Right
         
-        print(self.measures.lineSensor)
+        lineSensor = self.measures.lineSensor.copy()
+        lineSensor[2:5] = [('1' if prev == '1' or curr == '1' else '0') for prev, curr in zip(self.prevLineSensor[2:5], self.measures.lineSensor[2:5])]
+        self.prevLineSensor = self.measures.lineSensor.copy()
+
+        print(self.measures.lineSensor, '->', lineSensor)
         n_active = self.measures.lineSensor.count("1")
 
         # Robot is off track
@@ -222,10 +85,20 @@ class MyRob(CRobLinkAngs):
         left = self.measures.lineSensor[:3].count("1")
         right = self.measures.lineSensor[4:].count("1")
 
+        # if left - right == 2:
+        #     print('Rotate slowly left')
+        #     self.driveMotors(-0.0, +0.15)
+        #     self.history.append(1)
+
         if left - right > 1:
             print('Rotate left')
             self.driveMotors(-0.15, +0.15)
             self.history.append(1)
+
+        # elif left - right == -2:
+        #     print('Rotate slowly right')
+        #     self.driveMotors(+0.15, -0.0)
+        #     self.history.append(1)
 
         elif left - right < -1:
             print('Rotate right')
@@ -234,11 +107,11 @@ class MyRob(CRobLinkAngs):
 
         else: 
             print('Go')
-            action = self.safeguard()
+            action = self.safeguard(lineSensor)
             self.driveMotors(action[0], action[1])
             self.history.append(0)
 
-    def safeguard(self):
+    def safeguard(self, lineSensor):
         center_id = 0
         left_id = 1
         right_id = 2
@@ -253,16 +126,7 @@ class MyRob(CRobLinkAngs):
             return (0.1, 0.0)
         elif self.measures.irSensor[right_id]> 2.7:
             return (0.0, 0.1)
-        return (0.15, 0.15) # Max speed
-
-    _wanderApproaches = {
-        'base': wanderBase,
-        'basic': wanderBasic,
-        'byLineSensorMemory': wanderByLineSensorMemory,
-        'withRotationHistory': wanderWithRotationHistory,
-        'baseImproved': wanderBaseImproved,
-        'withBacktracking': wanderWithBacktracking
-    }
+        return self.follow_path(lineSensor)
 
     def run(self):
         if self.status != 0:
@@ -291,7 +155,7 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
-                self.wander(self)
+                self.wander()
             elif state=='wait':
                 self.setReturningLed(True)
                 if self.measures.visitingLed==True:
@@ -304,7 +168,7 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
-                self.wander(self)
+                self.wander()
 
 
 class Map():
@@ -339,8 +203,6 @@ rob_name = "pClient1"
 host = "localhost"
 pos = 1
 mapc = None
-# DEFAULT APPROACH
-approach = 'withBacktracking'
 
 for i in range(1, len(sys.argv),2):
     if (sys.argv[i] == "--host" or sys.argv[i] == "-h") and i != len(sys.argv) - 1:
@@ -351,14 +213,12 @@ for i in range(1, len(sys.argv),2):
         rob_name = sys.argv[i + 1]
     elif (sys.argv[i] == "--map" or sys.argv[i] == "-m") and i != len(sys.argv) - 1:
         mapc = Map(sys.argv[i + 1])
-    elif (sys.argv[i] == "--approach" or sys.argv[i] == "-a") and i != len(sys.argv) - 1:
-        approach = sys.argv[i + 1]
     else:
         print("Unkown argument", sys.argv[i])
         quit()
 
 if __name__ == '__main__':
-    rob=MyRob(rob_name,pos,[0.0,60.0,-60.0,180.0],host,approach)
+    rob=MyRob(rob_name,pos,[0.0,60.0,-60.0,180.0],host)
     if mapc != None:
         rob.setMap(mapc.labMap)
         rob.printMap()

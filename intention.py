@@ -11,16 +11,16 @@ from utils import map_to_text, wavefront_expansion
 
 
 
-LOG_CLEAR = True
+LOG_CLEAR = False
 LOG_STARTING_POS = False
 LOG_INTENTION = True
-LOG_SENSORS = False
+LOG_SENSORS = True
 LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = False
 LOG_GROUND = True
 LOG_CHECKPOINTS = True
 LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
-LOG_MAP = True
+LOG_MAP = False
 
 SPEED_OPTIMIZATIONS = True
 
@@ -258,10 +258,10 @@ class Wander(Intention):
 
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
-            return (-self.velocity, -self.velocity), None
+            return (0.0, 0.0), None
 
         # Robot is on track
-        left = measures.lineSensor[:5].count("1")
+        left = measures.lineSensor[:4].count("1")
         right = measures.lineSensor[3:].count("1")
 
         # leftTurn = left == 3
