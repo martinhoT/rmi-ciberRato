@@ -19,6 +19,7 @@ LOG_INTERSECTIONS = False
 LOG_CALCULATED_PATH = False
 LOG_GROUND = True
 LOG_CHECKPOINTS = True
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
 LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
@@ -81,6 +82,9 @@ class Intention:
             print('Ground:', measures.ground)
         if LOG_CHECKPOINTS:
             print('Checkpoints:', rdata.checkpoints)
+        if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
+            print('Distance to known intersection ahead:', Intention.get_walkable_distance_to_closest_intersection_in_front_of_pos(
+                self.round_pos(measures.x, measures.y, rdata.starting_position), self.getDirection(measures), rdata.intersections, rdata.pmap))
         if LOG_MAP and rdata.pmap:
             for line in map_to_text(list(rdata.pmap)):
                 print(''.join(line))
@@ -197,7 +201,7 @@ class Intention:
         distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in intersections
             if intersection_in_front_distance(intersection, position) > 0]
 
-        if SPEED_OPTIMIZATIONS and distance_of_intersections_in_front_of_me:
+        if distance_of_intersections_in_front_of_me:
             # There needs to be straight path to the intersection
             closest_distance = min(distance_of_intersections_in_front_of_me)
             
@@ -208,7 +212,7 @@ class Intention:
                 Direction.S: lambda i, n: (i[0], i[1] - n)
             }[direction]
 
-            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance + 1)}
+            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance)}
             
             # Should reach that intersection in a known straight path from this position
             if len(positions_to_be_covered - set(pmap)) == 0:

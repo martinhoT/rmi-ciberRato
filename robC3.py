@@ -38,10 +38,21 @@ class MyRob(CRobLinkAngs):
         
         # TODO: Optimization for C3: Don't map the entire map, that's not necessary
         # The map has been sufficiently traversed, no need to map the rest of the intersections
-        def sufficient_map(rdata: RobData):
-            pass
+        def sufficient_map(rdata: RobData) -> bool:
+            if len(rdata.intersections) != 0:
+                return False
 
-        def exhausted_intersections(rdata: RobData):
+            # For every unexplored intersection, check if it's worth it to explore it. If not, consider the non-visited paths as being already visited
+            unexplored_intersections = (i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0)
+            for unexplored_intersection in unexplored_intersections:
+                worth_exploring = ...
+                if not worth_exploring:
+                    for path in unexplored_intersection.get_possible_paths():
+                        unexplored_intersection.add_visited_path(path)
+            
+            return all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
+
+        def exhausted_intersections(rdata: RobData) -> bool:
             return len(rdata.intersections) != 0 \
                 and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
 

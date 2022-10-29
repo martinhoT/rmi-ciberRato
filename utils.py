@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, List
 from graph import Node
 
 def map_to_text(positions: List[int]) -> List[str]:

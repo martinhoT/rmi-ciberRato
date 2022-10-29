@@ -36,7 +36,7 @@ class MyRob(CRobLinkAngs):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
         # All known intersections have been exhausted, which should mean that the entire map has been traversed
-        def exhausted_intersections(rdata: RobData):
+        def exhausted_intersections(rdata: RobData) -> bool:
             return len(rdata.intersections) != 0 \
                 and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
 
