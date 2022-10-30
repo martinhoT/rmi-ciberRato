@@ -37,7 +37,6 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
-        # TODO: Optimization for C3: Don't map the entire map, that's not necessary
         # The map has been sufficiently traversed, no need to map the rest of the intersections
         def sufficient_map(rdata: RobData) -> bool:
             if len(rdata.intersections) == 0 \
@@ -48,7 +47,7 @@ class MyRob(CRobLinkAngs):
 
             # For every unexplored intersection, check if it's worth it to explore it
             # If not, consider the non-visited paths as being already visited
-            unexplored_intersections = (i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0)
+            unexplored_intersections = [i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0]
             for unexplored_intersection in unexplored_intersections:
                 # Explore if manhattan distance to any other unexplored intersection is
                 # less than the actual distance to those intersections
@@ -65,12 +64,10 @@ class MyRob(CRobLinkAngs):
                             worth_exploring = True
                             break
 
-
                 if not worth_exploring:
                     # Consider the unexplored intersection has having already been explored
-                    for path in unexplored_intersection.get_possible_paths():
-                        unexplored_intersection.add_visited_path(path)
-            
+                    unexplored_intersection.possible_paths = unexplored_intersection.get_visited_paths()
+
             return all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
 
         self.data = RobData(
@@ -111,7 +108,7 @@ class MyRob(CRobLinkAngs):
                 self.intention = Rotate(
                     starting_direction=direction,
                     end_direction=opposite_direction(direction),
-                    advancement_steps=10,
+                    advancement_steps=15,
                     at_intersection=False)
 
             if self.measures.endLed:

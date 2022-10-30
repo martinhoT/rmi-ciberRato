@@ -1,7 +1,7 @@
 import random
 
 from os import system
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 from croblink import CMeasures
 from graph import Checkpoint, Intersection, Node
 from robData import RobData
@@ -201,16 +201,20 @@ class Wander(Intention):
             
                 return (0.0, 0.0), CheckIntersectionForward(intersection_pos)
 
-            # When the robot data suggests that the challenge has been finished
-            elif rdata.finished():
-                return (0.0, 0.0), Finish()
-
             # If the intersection is in the map
             else:
 
                 intersection = rdata.intersections[intersection_pos]
 
                 self.update_neighbours(intersection, rdata)
+
+                # Check if it is a new direction
+                if opposite_direction(direction) not in intersection.get_visited_paths():
+                    intersection.add_visited_path(opposite_direction(direction))
+
+                # When the robot data suggests that the challenge has been finished
+                if rdata.finished():
+                    return (0.0, 0.0), Finish()
 
                 # If there are pre-calculated intentions for this intersection, follow them
                 if intersection in rdata.path:
@@ -223,10 +227,6 @@ class Wander(Intention):
                     #  Reached the end of the path
                     else:
                         rdata.path.pop()
-
-                # Check if it is a new direction
-                if opposite_direction(direction) not in intersection.get_visited_paths():
-                    intersection.add_visited_path(opposite_direction(direction))
 
                 # If the robot already took all possible paths (at least once)
                 non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
@@ -277,18 +277,29 @@ class CheckIntersectionForward(Intention):
     def __init__(self, intersection_pos: Tuple[int, int], test_steps: int=5):
         super().__init__()
         self.intersection_pos = intersection_pos
-        self.test_steps = test_steps        
+        self.test_steps = test_steps
+        self.turn_at_left = False
+        self.turn_at_right = False
+        self.found_directions = set()
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
+        direction = Navigator.get_direction(measures.compass)
         next_intention = None
 
+        if all(ls == '1' for ls in measures.lineSensor[:2]):
+            self.found_directions.add(left_direction(direction))
+
+        if all(ls == '1' for ls in measures.lineSensor[5:]):
+            self.found_directions.add(right_direction(direction))
+
         if all(ls == '0' for ls in measures.lineSensor):
-            next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, False)
+            next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, self.found_directions)
 
         if self.test_steps == 0:
-            next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, True)
+            self.found_directions.add(direction)
+            next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, self.found_directions)
 
         self.test_steps -= 1
 
@@ -297,23 +308,21 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], has_intersection_forward: bool):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction]):
         super().__init__()
         self.intersection_pos = intersection_pos
-        self.has_intersection_forward = has_intersection_forward
+        self.found_directions = found_directions
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        direction = Navigator.get_direction(measures.compass)
-
         # If the robot is back at the intersection
         if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
             
-            if self.has_intersection_forward:
+            for found_direction in self.found_directions:
 
                 intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-                rdata.intersections[intersection].add_path(direction)
+                rdata.intersections[intersection].add_path(found_direction)
 
             return (self.velocity, self.velocity), TurnIntersection()
 
