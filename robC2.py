@@ -3,9 +3,10 @@ import sys
 from croblink import *
 from math import *
 import xml.etree.ElementTree as ET
+from directions import opposite_direction
 
-from intention import Wander, Finish
-from utils import map_to_text
+from intention import Wander, Finish, Rotate
+from utils import Navigator, map_to_text
 from robData import RobData
 
 CELLROWS=7
@@ -69,7 +70,12 @@ class MyRob(CRobLinkAngs):
             # Initial intention setup
             if not self.intention:
                 self.data.starting_position = (self.measures.x, self.measures.y)
-                self.intention = Wander()
+                direction = Navigator.get_direction(self.measures.compass)
+                self.intention = Rotate(
+                    starting_direction=direction,
+                    end_direction=opposite_direction(direction),
+                    advancement_steps=15,
+                    at_intersection=False)
 
             if self.measures.endLed:
                 print(self.robName + " exiting")
