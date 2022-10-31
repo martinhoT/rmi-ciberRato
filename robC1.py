@@ -1,6 +1,4 @@
 
-from lib2to3.pgen2.token import LEFTSHIFT
-from shutil import SpecialFileError
 import sys
 from typing import Tuple
 from croblink import *
@@ -30,8 +28,6 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         self.history = []
-        self.time_since_last_backtrack = 100
-        self.force_backtrack_steps = 0
         self.prevLineSensor = [ None ] * 7
 
     # In this map the center of cell (i,j), (i in 0..6, j in 0..13) is mapped to labMap[i*2][j*2].
@@ -71,9 +67,9 @@ class MyRob(CRobLinkAngs):
         n_active = lineSensor.count("1")
 
         # Robot is off track
-        if (n_active <= 0): #or self.force_backtrack_steps > 0):
-            
-            print('Off track - Backtracking...')
+        if (n_active <= 0):
+
+            print("Off track - Backtracking...")
 
             backtrack = 0.1
             last_move = self.history[-1]
@@ -83,16 +79,8 @@ class MyRob(CRobLinkAngs):
                 self.driveMotors(-backtrack, backtrack)
             else: 
                 self.driveMotors(backtrack, -backtrack)
-            
-            # if self.time_since_last_backtrack < 5:
-            #     self.force_backtrack_steps = self.time_since_last_backtrack * 2
-
-            # self.time_since_last_backtrack = 0
-            # self.force_backtrack_steps = max(self.force_backtrack_steps - 1, 0)
 
             return
-
-        # self.time_since_last_backtrack += 1
 
         # Robot is on track
         left = lineSensor[:3].count("1")
@@ -119,7 +107,7 @@ class MyRob(CRobLinkAngs):
             self.history.append(2)
 
         else: 
-            print('Go')
+            print('Go foward')
             action = self.safeguard(lineSensor)
             self.driveMotors(action[0], action[1])
             self.history.append(0)
