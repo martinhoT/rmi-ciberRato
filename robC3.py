@@ -7,7 +7,7 @@ from directions import opposite_direction
 
 from graph import Checkpoint, Intersection
 from intention import Rotate, Finish
-from utils import Navigator, manhattan_distance, map_to_text, wavefront_expansion
+from utils import get_direction, manhattan_distance, map_to_text, wavefront_expansion
 from robData import RobData
 
 CELLROWS=7
@@ -53,12 +53,12 @@ class MyRob(CRobLinkAngs):
                 for other_unexplored_intersection in unexplored_intersections:
                     if other_unexplored_intersection != unexplored_intersection:
                         minimum_distance = manhattan_distance(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
-                        known_distance = wavefront_expansion(
+                        known_path = wavefront_expansion(
                             unexplored_intersection,
                             key=lambda n: isinstance(n, Intersection) and n == other_unexplored_intersection,
                             max_distance=minimum_distance)
                         
-                        if not known_distance:
+                        if known_path is None:
                             worth_exploring = True
                             break
 
@@ -102,7 +102,7 @@ class MyRob(CRobLinkAngs):
             # Intention initialization that requires sensor measures
             if not self.intention:
                 self.data.starting_position = (self.measures.x, self.measures.y)
-                direction = Navigator.get_direction(self.measures.compass)
+                direction = get_direction(self.measures.compass)
                 self.intention = Rotate(
                     starting_direction=direction,
                     end_direction=opposite_direction(direction),
@@ -220,12 +220,11 @@ class MyRob(CRobLinkAngs):
         for sequence in itertools.permutations(checkpoints[1:]):
             sequence = [checkpoints[0]] + list(sequence) + [checkpoints[0]]
 
-            # path = self.pairwise(checkpoints + [checkpoints[0]])
             path = self.pairwise(sequence)
             path_positions = []
             
             for start_node, end_node in path:
-                path_intersections = wavefront_expansion(start_node, key=lambda node: isinstance(node, Checkpoint) and node.get_coordinates() == end_node.get_coordinates())
+                path_intersections, _ = wavefront_expansion(start_node, key=lambda node: isinstance(node, Checkpoint) and node.get_coordinates() == end_node.get_coordinates())
                 
                 for start, end in self.pairwise(path_intersections):
 

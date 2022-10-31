@@ -1,6 +1,7 @@
-from typing import Callable, Dict, List, Tuple
+import math
+from typing import Callable, Iterable, List, Tuple
 from directions import Direction
-from graph import Intersection, Node
+from graph import Node
 
 
 def map_to_text(positions: List[Tuple[int, int]]) -> List[str]:
@@ -34,7 +35,7 @@ def manhattan_distance(p1: Tuple[int, int], p2: Tuple[int, int]) -> int:
     return distance_x + distance_y
 
 
-def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_distance: int=None) -> List[Node]:
+def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_distance: int=None) -> Tuple[List[Node], int]:
     """Wavefront expansion algorithm to find the path to the closest node that satisfies the `key` condition."""
 
     # (Node, Path excluding this node, Path distance)
@@ -58,7 +59,7 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_dista
         for neighbour, distance in neighbours_distances:
 
             if key(neighbour):
-                return previous_nodes + [this_node, neighbour]
+                return previous_nodes + [this_node, neighbour], previous_distance + distance
 
             if neighbour not in checked_nodes:
                 nodes_to_explore.append((neighbour, previous_nodes + [this_node], previous_distance + distance))
@@ -66,104 +67,105 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_dista
     return None
 
 
-# TODO: explode this Navigator and leave the methods isolated like the ones above?
-class Navigator:
-    """Utility functions used for mapping and navigation involving positions and orientations."""
+# Obtain orientation of robot in the map
+def get_direction(compass: float) -> Direction:
+    if compass >= 45 and compass <= 135:
+        return Direction.N
+    elif compass < 45 and compass > -45:
+        return Direction.E
+    elif compass <= -45 and compass >= -135:
+        return Direction.S
+    else:
+        return Direction.W
 
-    # Obtain orientation of robot in the map
-    @classmethod
-    def get_direction(cls, compass: float) -> Direction:
-        if compass >= 45 and compass <= 135:
+def round_pos(x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
+    # Assumed that the robot is still in the starting position and hasn't updated it
+    if not starting_position:
+        return 0, 0
+    return round(x-starting_position[0]), round(y-starting_position[1])
+
+def round_pos_to_intersection(x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
+    if not starting_position:
+        return 0, 0
+    return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
+
+def get_direction_from_path(start: Node, end: Node) -> Direction:
+
+    # Same x
+    if start.get_x() == end.get_x():
+        if end.get_y() > start.get_y():
             return Direction.N
-        elif compass < 45 and compass > -45:
-            return Direction.E
-        elif compass <= -45 and compass >= -135:
+        else:
             return Direction.S
+    
+    # Same y
+    else:
+        if end.get_x() > start.get_x():
+            return Direction.E
         else:
             return Direction.W
+
+def get_distance_to_closest_intersection_in_front_of_pos(
+        position: Tuple[float, float],
+        direction: Direction,
+        intersections: Iterable[Tuple[int, int]],
+        rounded_position: Tuple[int, int]=None) -> float:
+
+    # The position is already rounded
+    if not rounded_position:
+        rounded_position = position
+
+    p = position
+    r = rounded_position
+
+    # If the intersection in front of me is far away, then speed up
+    intersection_in_front_distance = {
+        Direction.E: lambda i: i[0] - p[0] if i[1] == r[1] else -1,
+        Direction.W: lambda i: p[0] - i[0] if i[1] == r[1] else -1,
+        Direction.N: lambda i: i[1] - p[1] if i[0] == r[0] else -1,
+        Direction.S: lambda i: p[1] - i[1] if i[0] == r[0] else -1
+    }[direction]
+
+    distance_of_intersections_in_front_of_me = [
+        distance for distance in map(intersection_in_front_distance, intersections) if distance > 0]
+
+    return min(distance_of_intersections_in_front_of_me, default=None)
+
+def get_walkable_distance_to_closest_intersection_in_front_of_pos(
+        position: Tuple[float, float],
+        direction: Direction,
+        intersections: Iterable[Tuple[int, int]],
+        pmap: List[Tuple[int, int]],
+        rounded_position: Tuple[int, int]=None) -> float:
+
+    if not rounded_position:
+        rounded_position = position
+
+    closest_distance = get_distance_to_closest_intersection_in_front_of_pos(
+        position, direction, intersections, rounded_position)
     
-    @classmethod
-    def round_pos(cls, x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
-        # Assumed that the robot is still in the starting position and hasn't updated it
-        if not starting_position:
-            return 0, 0
-        return round(x-starting_position[0]), round(y-starting_position[1])
+    if closest_distance:
 
-    @classmethod
-    def round_pos_to_intersection(cls, x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
-        if not starting_position:
-            return 0, 0
-        return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
-
-    @classmethod
-    def get_direction_from_path(cls, start: Node, end: Node) -> Direction:
-
-        # Same x
-        if start.get_x() == end.get_x():
-            if end.get_y() > start.get_y():
-                return Direction.N
-            else:
-                return Direction.S
-        
-        # Same y
-        else:
-            if end.get_x() > start.get_x():
-                return Direction.E
-            else:
-                return Direction.W
-
-    @classmethod
-    def get_distance_to_closest_intersection_in_front_of_pos(cls,
-            position: Tuple[int, int],
-            direction: Direction,
-            intersections: Dict[Tuple[int, int], Intersection]) -> int:
-        
-        # If the intersection in front of me is far away, then speed up
-        intersection_in_front_distance = {
-            Direction.E: lambda i, p: i[0] - p[0] if i[1] == p[1] else -1,
-            Direction.W: lambda i, p: p[0] - i[0] if i[1] == p[1] else -1,
-            Direction.N: lambda i, p: i[1] - p[1] if i[0] == p[0] else -1,
-            Direction.S: lambda i, p: p[1] - i[1] if i[0] == p[0] else -1
+        intersection_step = {
+            Direction.E: lambda i, n: (i[0] + n, i[1]),
+            Direction.W: lambda i, n: (i[0] - n, i[1]),
+            Direction.N: lambda i, n: (i[0], i[1] + n),
+            Direction.S: lambda i, n: (i[0], i[1] - n)
         }[direction]
 
-        distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in intersections
-            if intersection_in_front_distance(intersection, position) > 0]
-
-        return min(distance_of_intersections_in_front_of_me, default=None)
-
-    @classmethod
-    def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,
-            position: Tuple[int, int],
-            direction: Direction,
-            intersections: Dict[Tuple[int, int], Intersection],
-            pmap: List[Tuple[int, int]]) -> int:
-
-        closest_distance = cls.get_distance_to_closest_intersection_in_front_of_pos(
-            position, direction, intersections)
+        positions_to_be_covered = {intersection_step(rounded_position, n) for n in range(1, math.ceil(closest_distance))}
         
-        if closest_distance:
-
-            intersection_step = {
-                Direction.E: lambda i, n: (i[0] + n, i[1]),
-                Direction.W: lambda i, n: (i[0] - n, i[1]),
-                Direction.N: lambda i, n: (i[0], i[1] + n),
-                Direction.S: lambda i, n: (i[0], i[1] - n)
-            }[direction]
-
-            positions_to_be_covered = {intersection_step(position, n) for n in range(1, closest_distance)}
-            
-            # Should reach that intersection in a known straight path from this position
-            if len(positions_to_be_covered - set(pmap)) == 0:
-                return closest_distance
-        
-        return None
+        # Should reach that intersection in a known straight path from this position
+        if len(positions_to_be_covered - set(pmap)) == 0:
+            return closest_distance
     
-    @classmethod
-    def get_angle_to_track(cls, compass: float):
-        direction = cls.get_direction(compass)
-        return compass - \
-                 (90 if direction == Direction.N
-            else -90 if direction == Direction.S
-            else  180 if compass > 135
-            else -180 if compass < -135
-            else 0)
+    return None
+
+def get_angle_to_track(compass: float):
+    direction = get_direction(compass)
+    return compass - \
+                (90 if direction == Direction.N
+        else -90 if direction == Direction.S
+        else  180 if compass > 135
+        else -180 if compass < -135
+        else 0)
