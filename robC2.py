@@ -74,8 +74,7 @@ class MyRob(CRobLinkAngs):
                 self.intention = Rotate(
                     starting_direction=direction,
                     end_direction=opposite_direction(direction),
-                    advancement_steps=15,
-                    at_intersection=False)
+                    advancement_steps=15)
 
             if self.measures.endLed:
                 print(self.robName + " exiting")

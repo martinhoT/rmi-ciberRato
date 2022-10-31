@@ -2,6 +2,7 @@ from typing import Callable, Dict, List, Tuple
 from directions import Direction
 from graph import Intersection, Node
 
+
 def map_to_text(positions: List[Tuple[int, int]]) -> List[str]:
     start_position = (0, 0)
     gwidth = 49
@@ -26,6 +27,13 @@ def map_to_text(positions: List[Tuple[int, int]]) -> List[str]:
 
     return grid
 
+
+def manhattan_distance(p1: Tuple[int, int], p2: Tuple[int, int]) -> int:
+    distance_x = abs(p1[0] - p2[0])
+    distance_y = abs(p1[1] - p2[1])
+    return distance_x + distance_y
+
+
 def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_distance: int=None) -> List[Node]:
     """Wavefront expansion algorithm to find the path to the closest node that satisfies the `key` condition."""
 
@@ -33,11 +41,11 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_dista
     nodes_to_explore  = [(start_node, [], 0)]
     neighbours = None
     checked_nodes = []
-    distance_to_this_point = lambda t: t[2]
+    distance_so_far = lambda t: t[2]
 
     while nodes_to_explore:
 
-        nodes_to_explore.sort(key=distance_to_this_point, reverse=True)
+        nodes_to_explore.sort(key=distance_so_far, reverse=True)
         this_node, previous_nodes, previous_distance = nodes_to_explore.pop()
         neighbours = this_node.get_neighbours()
 
@@ -46,21 +54,19 @@ def wavefront_expansion(start_node: Node, key: Callable[[Node], bool], max_dista
 
         checked_nodes.append(this_node)
 
-        for neighbour in neighbours:
+        neighbours_distances = sorted(( (neighbour, manhattan_distance(this_node.get_coordinates(), neighbour.get_coordinates())) for neighbour in neighbours ), key=lambda t: t[1])
+        for neighbour, distance in neighbours_distances:
 
             if key(neighbour):
                 return previous_nodes + [this_node, neighbour]
 
             if neighbour not in checked_nodes:
-                distance_x = abs(this_node.get_x() - neighbour.get_x())
-                distance_y = abs(this_node.get_y() - neighbour.get_y())
-                distance = distance_x + distance_y
-
                 nodes_to_explore.append((neighbour, previous_nodes + [this_node], previous_distance + distance))
     
     return None
 
 
+# TODO: explode this Navigator and leave the methods isolated like the ones above?
 class Navigator:
     """Utility functions used for mapping and navigation involving positions and orientations."""
 
@@ -123,10 +129,7 @@ class Navigator:
         distance_of_intersections_in_front_of_me = [intersection_in_front_distance(intersection, position) for intersection in intersections
             if intersection_in_front_distance(intersection, position) > 0]
 
-        if distance_of_intersections_in_front_of_me:
-            return min(distance_of_intersections_in_front_of_me)
-        
-        return None
+        return min(distance_of_intersections_in_front_of_me, default=None)
 
     @classmethod
     def get_walkable_distance_to_closest_intersection_in_front_of_pos(cls,

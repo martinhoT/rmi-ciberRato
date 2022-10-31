@@ -7,7 +7,7 @@ from directions import opposite_direction
 
 from graph import Checkpoint, Intersection
 from intention import Rotate, Finish
-from utils import Navigator, map_to_text, wavefront_expansion
+from utils import Navigator, manhattan_distance, map_to_text, wavefront_expansion
 from robData import RobData
 
 CELLROWS=7
@@ -43,8 +43,6 @@ class MyRob(CRobLinkAngs):
                     or len(rdata.checkpoints) != int(self.nBeacons):
                 return False
 
-            manhattan_dist = lambda t1, t2: abs(t1[0]-t2[0]) + abs(t1[1]-t2[1])
-
             # For every unexplored intersection, check if it's worth it to explore it
             # If not, consider the non-visited paths as being already visited
             unexplored_intersections = [i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0]
@@ -54,7 +52,7 @@ class MyRob(CRobLinkAngs):
                 worth_exploring = False
                 for other_unexplored_intersection in unexplored_intersections:
                     if other_unexplored_intersection != unexplored_intersection:
-                        minimum_distance = manhattan_dist(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
+                        minimum_distance = manhattan_distance(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
                         known_distance = wavefront_expansion(
                             unexplored_intersection,
                             key=lambda n: isinstance(n, Intersection) and n == other_unexplored_intersection,
@@ -108,8 +106,7 @@ class MyRob(CRobLinkAngs):
                 self.intention = Rotate(
                     starting_direction=direction,
                     end_direction=opposite_direction(direction),
-                    advancement_steps=15,
-                    at_intersection=False)
+                    advancement_steps=15)
 
             if self.measures.endLed:
                 print(self.robName + " exiting")

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class RobData:
     pmap:                       List[Tuple[int, int]]               = field(default_factory=list)
     intersections:              Dict[Tuple[int, int], Intersection] = field(default_factory=dict)
-    previous_node:              Intersection                        = field(default=None)
+    previous_intersection:      Intersection                        = field(default=None)
     starting_position:          Tuple[int, int]                     = field(default=())
     path:                       List[Intersection]                  = field(default_factory=list)
     intersections_intentions:   List['Intention']                   = field(default_factory=list)

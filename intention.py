@@ -16,7 +16,7 @@ LOG_STARTING_POS = False
 LOG_INTENTION = True
 LOG_SENSORS = False
 LOG_INTERSECTIONS = True
-LOG_CALCULATED_PATH = False
+LOG_CALCULATED_PATH = True
 LOG_GROUND = False
 LOG_CHECKPOINTS = False
 LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
@@ -39,7 +39,7 @@ class Intention:
             if LOG_STARTING_POS:
                 print(rdata.starting_position)
             if LOG_INTENTION:
-                print(self.__class__.__name__)
+                print(self)
             if LOG_SENSORS:
                 print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({Navigator.round_pos(measures.x, measures.y, rdata.starting_position)})')
             if LOG_INTERSECTIONS:
@@ -48,11 +48,12 @@ class Intention:
                     not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
                     if not_visited:
                         print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
+                print('Previous intersection:', rdata.previous_intersection)
             if LOG_CALCULATED_PATH:
                 print('Calculated Path:')
                 print('Robot Position:', Navigator.round_pos(measures.x, measures.y, rdata.starting_position))
-                print(rdata.path)
-                print(rdata.intersections_intentions)
+                print('Next intersections:', rdata.path)
+                print('Next intentions:', rdata.intersections_intentions)
             if LOG_GROUND:
                 print('Ground:', measures.ground)
             if LOG_CHECKPOINTS:
@@ -96,9 +97,9 @@ class Intention:
                 self.velocity * (1 - (angle_to_track/45) - (right*1/3 if left_imbalance < 0 else 0)))
     
     def update_neighbours(self, node: Node, rdata: RobData):
-        if rdata.previous_node and node != rdata.previous_node:
-            node.add_neighbour(rdata.previous_node)
-            rdata.previous_node.add_neighbour(node)
+        if rdata.previous_intersection and node != rdata.previous_intersection:
+            node.add_neighbour(rdata.previous_intersection)
+            rdata.previous_intersection.add_neighbour(node)
 
     def line_sensor_discontinuity(self, lineSensor: List[str]) -> bool:
         """Report whether the current line sensors are likely to be heavily disrupted by noise."""
@@ -147,7 +148,7 @@ class Wander(Intention):
         # Robot is off track
         n_active = measures.lineSensor.count("1")
         if (n_active == 0):
-            return (0.0, 0.0), Rotate(direction, opposite_direction(direction), advancement_steps=0, at_intersection=False)
+            return (0.0, 0.0), Rotate(direction, opposite_direction(direction), advancement_steps=-2)
 
         # Line Sensors detcted a discontinuity
         if self.line_sensor_discontinuity(measures.lineSensor):
@@ -166,56 +167,17 @@ class Wander(Intention):
             # Adjust position to the closest possible intersection
             intersection_pos = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
 
-            next_intention = None
-
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
-                next_intention, intersection = self.create_intersection(intersection_pos, direction, rdata.intersections, rdata.previous_node)
-                self.update_neighbours(intersection, rdata)
-                rdata.previous_node = intersection
+                next_intention = self.create_intersection(intersection_pos, rdata.intersections)
                 return (0.0, 0.0), next_intention
             
             # When the robot data suggests that the challenge has been finished
+            # TODO: this can be outside, but will fail C2 if the map is only a line
             if rdata.finished():
                 return (0.0, 0.0), Finish()
 
-            intersection = rdata.intersections[intersection_pos]
-
-            # Add visited path to previous intersection and current intersection
-            intersection.add_visited_path(opposite_direction(direction))
-            if rdata.previous_node and rdata.previous_node != intersection:
-                rdata.previous_node.add_visited_path(direction)
-
-            self.update_neighbours(intersection, rdata)
-
-            # If there are pre-calculated intentions for this intersection, follow them
-            if rdata.intersections_intentions:
-                rdata.path.pop(0)
-                next_intention = rdata.intersections_intentions.pop(0)
-            
-            else:
-                # If the robot already took all possible paths (at least once)
-                non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
-                if not non_visited_paths:
-
-                    # Wavefront expansion to find the path to the closest intersection with non-visited paths
-                    path_to_closest_intersection = wavefront_expansion(
-                        start_node=intersection,
-                        key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()))
-
-                    if path_to_closest_intersection:
-                        rdata.intersections_intentions = self.calculate_moves(direction, path_to_closest_intersection)
-                        rdata.path = path_to_closest_intersection[1:]
-                        next_intention = rdata.intersections_intentions.pop(0)
-
-                # If there are still paths to take
-                else:
-                    next_intention = TurnIntersection()
-
-            # Update previous node to current intersection
-            rdata.previous_node = intersection
-
-            return None, next_intention
+            return None, TurnIntersection()
             
         extra_velocity = 0
         if SPEED_OPTIMIZATIONS:
@@ -233,16 +195,13 @@ class Wander(Intention):
         action = self.follow_path(measures)
         return (action[0]*(1 + extra_velocity), action[1]*(1 + extra_velocity)), None
     
-    def create_intersection(self, intersection_pos: Tuple[int, int], direction: Direction,
-            intersection_list: Dict[Tuple[int, int], Intersection], previous_node: Node) -> Tuple[Intention, Intersection]:
+    def create_intersection(self, intersection_pos: Tuple[int, int],
+            intersection_list: Dict[Tuple[int, int], Intersection]) -> Intention:
         
         intersection = Intersection(intersection_pos[0], intersection_pos[1])
         intersection_list[intersection_pos] = intersection
 
-        # Add current path to intersection
-        intersection.add_path(opposite_direction(direction))
-
-        return CheckIntersectionForward(intersection_pos), intersection
+        return CheckIntersectionForward(intersection_pos)
 
     def check_if_intersection(self, lineSensor: List[str]) -> bool:
 
@@ -262,8 +221,6 @@ class CheckIntersectionForward(Intention):
         super().__init__()
         self.intersection_pos = intersection_pos
         self.test_steps = test_steps
-        self.turn_at_left = False
-        self.turn_at_right = False
         self.found_directions = set()
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
@@ -306,7 +263,8 @@ class CheckIntersectionForwardBacktrack(Intention):
             for found_direction in self.found_directions:
 
                 intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-                rdata.intersections[intersection].add_path(found_direction)
+                rdata.intersections[intersection].add_path( found_direction )
+            rdata.intersections[intersection].add_path( opposite_direction(Navigator.get_direction(measures.compass)) )
 
             return (self.velocity, self.velocity), TurnIntersection()
 
@@ -322,40 +280,76 @@ class TurnIntersection(Intention):
         direction = Navigator.get_direction(measures.compass)
         intersection = rdata.intersections[intersection_pos]
 
-        if rdata.previous_node and rdata.previous_node != intersection:
+        if rdata.previous_intersection:
             intersection.add_visited_path(opposite_direction(direction))
-            rdata.previous_node.add_visited_path(direction)
+            rdata.previous_intersection.add_visited_path(direction)
 
         self.update_neighbours(intersection, rdata)
 
-        non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
-        for available in non_visited_paths:
-            if Navigator.get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, direction, rdata.intersections) == 2:
-                break
-
-        assert opposite_direction(direction) != available, 'Should not have the possibility to turn back!'
-
         next_intention = None
-        if direction == available:
-            next_intention = MoveForward()
-        else:
-            next_intention = Rotate(direction, available)
 
-        # Add chosen path
-        intersection.add_visited_path(available)
+        # If there are pre-calculated intentions, follow them
+        if rdata.intersections_intentions:
+            rdata.path.pop(0)
+            next_intention = rdata.intersections_intentions.pop(0)
         
+        # If not, choose a path to take
+        else:
+            # If the robot already took all possible paths (at least once)
+            non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
+            if not non_visited_paths:
+
+                # Wavefront expansion to find the path to the closest intersection with non-visited paths
+                path_to_closest_intersection = wavefront_expansion(
+                    start_node=intersection,
+                    key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()))
+
+                if path_to_closest_intersection:
+                    rdata.intersections_intentions = self.calculate_moves(direction, path_to_closest_intersection)
+                    rdata.path = path_to_closest_intersection[1:]
+                    next_intention = rdata.intersections_intentions.pop(0)
+            
+            # If there are non-visited paths to take
+            else:
+                available_paths = [(available, Navigator.get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, available, rdata.intersections))
+                        for available in non_visited_paths]
+                available, _ = min(available_paths, key=lambda t: t[1] if t[1] is not None else 10)
+                
+                # TODO: only in the beginning is the opposite direction taken, possible to optimize?
+                # assert opposite_direction(direction) != available, 'Should not have the possibility to turn back!'
+
+                next_intention = None
+                if direction == available:
+                    next_intention = MoveForward()
+                else:
+                    next_intention = Rotate(direction, available)
+
+                # Add chosen path
+                intersection.add_visited_path(available)
+
+        # If no path was explicitly chosen, then take a random path from the available paths (to avoid loops)
+        if not next_intention:
+            available = random.choice(list(intersection.get_possible_paths()))
+
+            if direction == available:
+                return None, MoveForward()
+            else:
+                return None, Rotate(direction, available)
+        
+        rdata.previous_intersection = intersection
+
         return None, next_intention
             
 
 class Rotate(Intention):
 
-    def __init__(self, starting_direction: Direction, end_direction: Direction, advancement_steps: int=3, at_intersection: bool=True):
+    def __init__(self, starting_direction: Direction, end_direction: Direction, advancement_steps: int=3):
         super().__init__()
 
         self.end_direction = end_direction
         self.left = left_direction(starting_direction) == end_direction
-        self.advancement_steps = advancement_steps
-        self.at_intersection = at_intersection
+        self.advancement_steps, self.advancement_modifier = \
+            (advancement_steps, 1) if advancement_steps >= 0 else (abs(advancement_steps), -1)
 
         self.count = 0
     
@@ -363,7 +357,7 @@ class Rotate(Intention):
         self.log_measured(measures, rdata)
 
         if self.count < self.advancement_steps:
-            left_motor = right_motor = self.velocity
+            left_motor = right_motor = self.velocity * self.advancement_modifier
             self.count += 1
         else:
             left_motor = self.velocity if not self.left else -self.velocity
@@ -371,12 +365,6 @@ class Rotate(Intention):
 
         next_intention = None
         if Navigator.get_direction(measures.compass) == self.end_direction and abs(Navigator.get_angle_to_track(measures.compass)) < 30:
-
-            # Update visited path
-            # if self.at_intersection:
-            #     direction = Navigator.get_direction(measures.compass)
-            #     intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-            #     rdata.intersections[intersection].add_visited_path(direction)
 
             next_intention = Wander()
         
@@ -392,8 +380,8 @@ class MoveForward(Intention):
         self.log_measured(measures, rdata)
 
         # Update visited path
-        direction = Navigator.get_direction(measures.compass)        
-        intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+        # direction = Navigator.get_direction(measures.compass)
+        # intersection = Navigator.round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
         
         # rdata.intersections[intersection].add_visited_path(direction)
 
