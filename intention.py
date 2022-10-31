@@ -11,16 +11,16 @@ from utils import *
 
 
 LOG = True
-LOG_CLEAR = True
+LOG_CLEAR = False
 LOG_STARTING_POS = False
 LOG_INTENTION = True
-LOG_SENSORS = False
-LOG_INTERSECTIONS = True
-LOG_CALCULATED_PATH = True
+LOG_SENSORS = True
+LOG_INTERSECTIONS = False
+LOG_CALCULATED_PATH = False
 LOG_GROUND = False
-LOG_CHECKPOINTS = True
-LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
-LOG_MAP = True
+LOG_CHECKPOINTS = False
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
+LOG_MAP = False
 
 SPEED_OPTIMIZATIONS = True
 
@@ -173,7 +173,7 @@ class Wander(Intention):
         # Robot is off track
         n_active = measures.lineSensor.count("1")
         if (n_active == 0):
-            return (0.0, 0.0), Rotate(direction, opposite_direction(direction), advancement_steps=-2)
+            return (0.0, 0.0), TurnBack()
 
         # Line Sensors detcted a discontinuity
         if self.line_sensor_discontinuity(measures.lineSensor):
@@ -215,7 +215,6 @@ class Wander(Intention):
                 speed_up_portion = (1.5, 2.0)
 
                 velocity_modifier = self.speed_up_func(closest_distance, max_speed, self.velocity, slow_down_portion, speed_up_portion)
-                
 
         action = self.follow_path(measures)
         return (action[0]*velocity_modifier, action[1]*velocity_modifier), None
@@ -373,16 +372,14 @@ class Rotate(Intention):
 
         self.end_direction = end_direction
         self.left = left_direction(starting_direction) == end_direction
-        self.advancement_steps, self.advancement_modifier = \
-            (advancement_steps, 1) if advancement_steps >= 0 else (abs(advancement_steps), -1)
-
+        self.advancement_steps = advancement_steps
         self.count = 0
     
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
         if self.count < self.advancement_steps:
-            left_motor = right_motor = self.velocity * self.advancement_modifier
+            left_motor = right_motor = self.velocity
             self.count += 1
         else:
             left_motor = self.velocity if not self.left else -self.velocity
@@ -427,6 +424,19 @@ class MoveForward(Intention):
     
     def __str__(self): return 'Move forward'
     def __repr__(self): return str(self)
+
+
+class TurnBack(Intention):
+    
+    def __init__(self):
+        super().__init__()
+
+    def act(self, measures: CMeasures, rdata: RobData):
+        
+        if any(ls=='1' for ls in measures.lineSensor):
+            return (0.0, 0.0), Wander()
+        
+        return (self.velocity, -self.velocity), TurnBack()
 
 
 class Finish(Intention):
