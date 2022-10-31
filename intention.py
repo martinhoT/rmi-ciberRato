@@ -432,8 +432,9 @@ class TurnBack(Intention):
         super().__init__()
 
     def act(self, measures: CMeasures, rdata: RobData):
-        
-        if any(ls=='1' for ls in measures.lineSensor):
+        self.log_measured(measures, rdata)
+
+        if len([ls for ls in measures.lineSensor if ls=='1']) > 2:
             return (0.0, 0.0), Wander()
         
         return (self.velocity, -self.velocity), TurnBack()
