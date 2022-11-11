@@ -39,15 +39,34 @@ case $challenge in
         ;;
     2)
         # how to call agent for challenge 2
-        # java mainC2 -h "$host" -p "$pos" -r "$robname" -f "$outfile"
         python3 robC2.py -h "$host" -p "$pos" -r "$robname" -f "$outfile"
         # mv your_mapfile $outfile.map             # if needed
         ;;
     3)
         # how to call agent for challenge 3
-        # ./mainC3 -h "$host" -p "$pos" -r "$robname" -f "$outfile"
         python3 robC3.py -h "$host" -p "$pos" -r "$robname" -f "$outfile"
         # mv your_pathfile $outfile.path           # if needed
         ;;
+
+    4)
+        rm -f *.path *.map  # do not remove this line
+
+        # how to call agent for challenge 4
+        python3 robC4.py -h "$host" -p "$pos" -r "$robname" -f "$outfile"
+        # mv your_mapfile $outfile.map
+        # mv your_pathfile $outfile.path
+        ;;
+
+        # how to call agent for challenge 4
+        #java mainC4 -h "$host" -p "$pos" -r "$robname" 
+        #mv your_mapfile $outfile.map
+        #mv your_pathfile $outfile.path
+        #;;
+
+        # how to call agent for challenge 4
+        #./mainC4 -h "$host" -p "$pos" -r "$robname"
+        #mv your_mapfile $outfile.map
+        #mv your_pathfile $outfile.path
+        #;;
 esac
 
