@@ -5,10 +5,10 @@ from math import *
 import xml.etree.ElementTree as ET
 from directions import opposite_direction
 
-from graph import Checkpoint, Intersection
+from graph import Checkpoint
 from intention import Rotate, Finish
-from utils import get_direction, manhattan_distance, map_to_text, wavefront_expansion
-from robData import RobData
+from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement
+from robData import MovementData, RobData
 
 CELLROWS=7
 CELLCOLS=14
@@ -17,40 +17,18 @@ class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
-        # The map has been sufficiently traversed, no need to map the rest of the intersections
-        # NOTE: could be better, since we can account for path directions when calculating the manhattan distance between intersections
-        def sufficient_map(rdata: RobData) -> bool:
-            if len(rdata.intersections) == 0 \
-                    or len(rdata.checkpoints) != int(self.nBeacons):
-                return False
-
-            # For every unexplored intersection, check if it's worth it to explore it
-            # If not, consider the non-visited paths as being already visited
-            unexplored_intersections = [i for i in rdata.intersections.values() if len(i.get_possible_paths() - i.get_visited_paths()) > 0]
-            for unexplored_intersection in unexplored_intersections:
-                # Explore if manhattan distance to any other unexplored intersection is
-                # less than the actual distance to those intersections
-                worth_exploring = False
-                for other_unexplored_intersection in unexplored_intersections:
-                    if other_unexplored_intersection != unexplored_intersection:
-                        minimum_distance = manhattan_distance(unexplored_intersection.get_coordinates(), other_unexplored_intersection.get_coordinates())
-                        known_path = wavefront_expansion(
-                            unexplored_intersection,
-                            key=lambda n: isinstance(n, Intersection) and n == other_unexplored_intersection,
-                            max_distance=minimum_distance)
-                        
-                        if known_path is None:
-                            worth_exploring = True
-                            break
-
-                if not worth_exploring:
-                    # Consider the unexplored intersection has having already been explored
-                    unexplored_intersection.possible_paths = unexplored_intersection.get_visited_paths()
-
-            return all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
-
+        def exhausted_intersections(rdata: RobData) -> bool:
+            return len(rdata.intersections) != 0 \
+                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
+        
+        starting_position = (0, 0)
+        # TODO: can we assume this?
+        starting_angle = 0.0
         self.data = RobData(
-            finish_condition=sufficient_map
+            starting_position=starting_position,
+            finish_condition=exhausted_intersections,
+            prepare_before_finish=True,
+            movement_guess=MovementData((0, 0), starting_position, starting_angle)
         )
         self.intention = None
         self.fname = fname
@@ -69,6 +47,22 @@ class MyRob(CRobLinkAngs):
         next(b, None)
         return zip(a, b)
 
+    def follow_intention(self) -> bool:
+        motors, next_intention = self.intention.act(self.measures, self.data)
+        
+        if not motors:
+            motors = self.data.previous_action
+        self.data.previous_action = motors
+        self.data.movement_guess = calculate_next_movement(motors, self.data.movement_guess)
+        self.driveMotors(*motors)
+
+        if isinstance(self.intention, Finish):
+            return True
+
+        if next_intention:
+            self.intention = next_intention
+        return False
+
     def run(self):
         if self.status != 0:
             print("Connection refused or error")
@@ -82,7 +76,6 @@ class MyRob(CRobLinkAngs):
 
             # Intention initialization that requires sensor measures
             if not self.intention:
-                self.data.starting_position = (self.measures.x, self.measures.y)
                 direction = get_direction(self.measures.compass)
                 self.intention = Rotate(
                     starting_direction=direction,
@@ -105,13 +98,9 @@ class MyRob(CRobLinkAngs):
                     state='wait'
                 if self.measures.ground==0:
                     self.setVisitingLed(True);
-                motors, next_intention = self.intention.act(self.measures, self.data)
-                if motors:
-                    self.driveMotors(*motors)
-                if isinstance(self.intention, Finish):
+                to_finish = self.follow_intention()
+                if to_finish:
                     break
-                if next_intention:
-                    self.intention = next_intention
             elif state=='wait':
                 self.setReturningLed(True)
                 if self.measures.visitingLed==True:
@@ -124,13 +113,9 @@ class MyRob(CRobLinkAngs):
                     self.setVisitingLed(False)
                 if self.measures.returningLed==True:
                     self.setReturningLed(False)
-                motors, next_intention = self.intention.act(self.measures, self.data)
-                if motors:
-                    self.driveMotors(*motors)
-                if isinstance(self.intention, Finish):
+                to_finish = self.follow_intention()
+                if to_finish:
                     break
-                if next_intention:
-                    self.intention = next_intention
 
         # Save final map
         with open(self.fname + ".map", "w") as file:

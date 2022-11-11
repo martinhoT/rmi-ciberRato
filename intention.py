@@ -68,25 +68,6 @@ class Intention:
                 for line in map_to_text(rdata.pmap):
                     print(''.join(line))
 
-    def safeguard(self, measures: CMeasures):
-        center_id = 0
-        left_id = 1
-        right_id = 2
-        back_id = 3
-
-        if measures.irSensor[center_id] > 5.0 \
-           or measures.irSensor[left_id]  > 5.0 \
-           or measures.irSensor[right_id] > 5.0 \
-           or measures.irSensor[back_id]  > 5.0:
-            return (-0.1, +0.1)
-        elif measures.irSensor[left_id]> 2.7:
-            return (0.1, 0.0)
-        elif measures.irSensor[right_id]> 2.7:
-            return (0.0, 0.1)
-
-        # return (0.15, 0.15) # Max speed
-        return (self.velocity, self.velocity)
-
     # The path is either a vertical or horizontal line
     def follow_path(self, measures: CMeasures) -> Tuple[int, int]:
         angle_to_track = get_angle_to_track(measures.compass)
@@ -164,7 +145,15 @@ class Wander(Intention):
         self.log_measured(measures, rdata)
 
         # Obtain position of robot in the map
-        position = round_pos(measures.x, measures.y, rdata.starting_position)
+        if measures.gpsReady:
+            position = round_pos(measures.x, measures.y, rdata.starting_position)
+        else:
+            coordinates = rdata.movement_guess.coordinates
+            position = estimate_pos(coordinates[0], coordinates[1], measures.compass, rdata.starting_position)
+            
+            # Update the movement guess
+            rdata.movement_guess.coordinates = position
+
         if position not in rdata.pmap:
             rdata.pmap.append(position)
 
@@ -199,7 +188,7 @@ class Wander(Intention):
             
             # When the robot data suggests that the challenge has been finished
             if rdata.finished():
-                return (0.0, 0.0), Finish()
+                return (0.0, 0.0), PrepareFinish(prepare=rdata.prepare_before_finish)
 
             return None, TurnIntersection()
             
@@ -401,12 +390,6 @@ class MoveForward(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        # Update visited path
-        # direction = get_direction(measures.compass)
-        # intersection = round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
-        
-        # rdata.intersections[intersection].add_visited_path(direction)
-
         left_motor = right_motor = self.velocity
 
         count = 0
@@ -431,7 +414,7 @@ class TurnBack(Intention):
     def __init__(self):
         super().__init__()
 
-    def act(self, measures: CMeasures, rdata: RobData):
+    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
         if len([ls for ls in measures.lineSensor if ls=='1']) > 2:
@@ -440,11 +423,25 @@ class TurnBack(Intention):
         return (self.velocity, -self.velocity), TurnBack()
 
 
+class PrepareFinish(Intention):
+
+    def __init__(self, prepare: bool=True):
+        super().__init__()
+        self.prepare = prepare
+    
+    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
+        if not self.prepare:
+            return None, Finish()
+        
+        # TODO: go back to the starting place
+        pass
+
+
 class Finish(Intention):
 
     def __init__(self):
         super().__init__()
 
-    def act(self, measures: CMeasures, rdata: RobData):
+    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         print('Number of noise discontinuities on lineSensors:', rdata.discontinuities)
         return (0.0, 0.0), None

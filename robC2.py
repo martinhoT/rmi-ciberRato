@@ -12,26 +12,6 @@ from robData import RobData
 CELLROWS=7
 CELLCOLS=14
 
-'''
-    Line sensor:
-    o _
-    o _|-> 0.08
-    o
-    o
-    o
-    o
-    o
-    Line width: 0.2
-    Distance to robot's center: 0.438
-    Diameter: 0.5
-    Cell width: 1.0
-    Max speed: 0.15
-
-    GPS:
-    - no noise
-    - random starting position
-'''
-
 class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)

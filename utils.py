@@ -1,10 +1,11 @@
 import math
-from typing import Callable, Iterable, List, Tuple
+from typing import Callable, Dict, Iterable, List, Tuple
 from directions import Direction
 from graph import Node
+from robData import MovementData
 
 
-def map_to_text(positions: List[Tuple[int, int]]) -> List[str]:
+def map_to_text(positions: List[Tuple[int, int]], checkpoints: Dict[int, Tuple[int, int]]=None) -> List[str]:
     start_position = (0, 0)
     gwidth = 49
     gheight = 21
@@ -25,6 +26,12 @@ def map_to_text(positions: List[Tuple[int, int]]) -> List[str]:
                 ' '
     
     grid[gcenter[1]][gcenter[0]] = 'I'
+
+    if checkpoints is not None:
+        for checkpoint_id, checkpoint_pos in checkpoints:
+            offset = sub(checkpoint_pos, start_position)
+            grid_pos = add(gcenter, offset)
+            grid[-grid_pos[1] - 1][grid_pos[0]] = str(checkpoint_id)
 
     return grid
 
@@ -169,3 +176,47 @@ def get_angle_to_track(compass: float):
         else  180 if compass > 135
         else -180 if compass < -135
         else 0)
+
+
+def estimate_pos(x: float, y: float, compass: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
+
+    direction = get_direction(compass)
+
+    # If the robot is facing north or south, x is rounded to the nearest even number
+    if direction == Direction.N or direction == Direction.S:
+        return round(x-starting_position[0]), y
+
+    # If the robot is facing north or south, y is rounded to the nearest even number
+    elif direction == Direction.E or direction == Direction.W:
+        return x, round(y-starting_position[1])
+    
+
+def calculate_next_movement(
+    current_in: Tuple[float, float], 
+    movement: MovementData) -> MovementData:
+
+    current_in_left = current_in[0]
+    current_in_right = current_in[1]
+
+    previous_out_left = movement.out[0]
+    previous_out_right = movement.out[1]
+    
+    current_out_left = (current_in_left + previous_out_left) / 2
+    current_out_right = (current_in_right + previous_out_right) / 2
+
+    lin = (current_out_left + current_out_right)/2
+
+    previous_x = movement.coordinates[0]
+    previous_y = movement.coordinates[1]
+
+    # Calculate next (x, y) position
+    x = previous_x + lin * math.cos(movement.angle)
+    y = previous_y + lin * math.sin(movement.angle)
+
+    D = 1 # Robot diameter
+    rot = (current_out_right - current_out_left)/D
+
+    # Calculate next angle
+    angle = movement.angle + rot
+
+    return MovementData((current_out_left, current_out_right), (x, y), angle)
