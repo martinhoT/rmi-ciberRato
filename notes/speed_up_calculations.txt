@@ -1,0 +1,59 @@
+Speed up in a straight line (disregarding noise)
+
+x_t = x_t-1 + lin * cos(theta_t-1)
+y_t = y_t-1 + lin * sin(theta_t-1)
+
+Since we are considering a straight line, we disregard the 2 dimensions and angles.
+
+d_t = d_t-1 + lin
+
+lin = (out_tl + out_tr)/2 = out_t
+
+out_t = 0.5 * in + 0.5 * out_t-1
+
+For in = out_t-1 = 0.08 we have:
+
+d_t = d_t-1 + lin
+<=> d_t - d_t-1 = out_t
+<=> d_t - d_t-1 = 0.5 * 0.08 + 0.5 * 0.08
+<=> d_t - d_t-1 = 0.08
+
+Objective: what is the desired power (in) over time such that, by the end, the speed d_t - d_t-1 is 0.08 and in the beginning it's the maximum 0.15.
+
+f(t) = d_t - d_t-1 = out_t
+x_t = in_t
+
+f(t) = 0.5 * x_t + 0.5 * f(t-1)
+<=> x_t = 2*f(t) - f(t-1)
+
+Speed up:
+f(0) = 0.08
+f(1) = 0.5 * x_1 + 0.5 * f(0)
+<=> 0.15 = 0.5 * x_1 + 0.5 * 0.08
+<=> x_1 = 0.3 - 0.08 = 0.22
+x_2 = 2*f(2) - f(1)
+    = 2*0.15 - 0.15
+    = 0.15
+x_3 = 2*f(3) - f(2)
+    = 2*0.15 - 0.15
+    = 0.15
+
+Slow down:
+f(0) = 0.15
+x_1 = 2*0.08 - 0.15 = 0.01
+x_2 = 2*0.08 - 0.08 = 0.08
+
+Therefore, we create a function G(d) where d is the distance to the next intersection, and will be composed of 3 functions:
+
+Function 1: Slow down (0 < d < 0.25)
+    G(0.0+) = 0.08
+    G(0.25) = 0.01
+
+Function 2: Constant (0.25 <= d <= 1.75)
+    G(0.25+) = 0.15
+    G(start-) = 0.15
+
+Function 3: Speed up (1.75 < d < +inf)
+    G(1.75) = 0.15
+    G(1.75+) = 0.22
+
