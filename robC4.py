@@ -6,23 +6,25 @@ import xml.etree.ElementTree as ET
 from directions import opposite_direction
 
 from graph import Checkpoint
-from intention import Rotate, Finish
-from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement
+from intention import Rotate, Finish, PrepareFinish
+from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
 from robData import MovementData, RobData
 
 CELLROWS=7
 CELLCOLS=14
 
+# TODO: test with custom maps containing large corridors (to check if movement guess is correct)
 class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
         
         def exhausted_intersections(rdata: RobData) -> bool:
             return len(rdata.intersections) != 0 \
-                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values())
+                and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values()) \
+                and len(rdata.intersections_intentions) == 0
         
         starting_position = (0, 0)
-        # TODO: can we assume this?
+        # We assume the robot is always facing east
         starting_angle = 0.0
         self.data = RobData(
             starting_position=starting_position,
@@ -55,6 +57,9 @@ class MyRob(CRobLinkAngs):
         self.data.previous_action = motors
         self.data.movement_guess = calculate_next_movement(motors, self.data.movement_guess)
         self.driveMotors(*motors)
+
+        if isinstance(next_intention, PrepareFinish):
+            update_checkpoints_neighbours(self.data)
 
         if isinstance(self.intention, Finish):
             return True
@@ -122,63 +127,8 @@ class MyRob(CRobLinkAngs):
             for line in map_to_text(self.data.pmap):
                 print(''.join(line), file=file)
 
-        # Obtain checkpoints neighbours
+        # Obtain checkpoints
         checkpoints = list(self.data.checkpoints.values())
-        for checkpoint in checkpoints:
-
-            coordinates = checkpoint.get_coordinates()
-            if coordinates in self.data.intersections:
-                intersection = self.data.intersections[coordinates]
-                neighbours = intersection.get_neighbours()
-                for neighbour in neighbours:
-                    checkpoint.add_neighbour(neighbour)
-                    neighbour.add_neighbour(checkpoint)
-
-            else:
-                
-                x = coordinates[0]
-                y = coordinates[1]
-
-                # Check if 0y
-                if (x, y-1) in self.data.pmap or (x, y+1) in self.data.pmap:
-
-                    intersections_at_y = [i for i in self.data.intersections.values() if i.get_x() == x]
-
-                    closest_intersection_at_down = min((i for i in intersections_at_y if i.get_y() < y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
-                    closest_intersection_at_up = min((i for i in intersections_at_y if i.get_y() > y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
-                    
-                    # Intersection has to be walkable
-                    closest_intersection_at_down = None if (x, y-1) not in self.data.pmap else closest_intersection_at_down
-                    closest_intersection_at_up = None if (x, y+1) not in self.data.pmap else closest_intersection_at_up
-                    
-                    if closest_intersection_at_down:
-                        checkpoint.add_neighbour(closest_intersection_at_down)
-                        closest_intersection_at_down.add_neighbour(checkpoint)
-
-                    if closest_intersection_at_up:
-                        checkpoint.add_neighbour(closest_intersection_at_up)
-                        closest_intersection_at_up.add_neighbour(checkpoint)
-
-
-                # Check if 0x
-                elif (x-1, y) in self.data.pmap or (x+1, y) in self.data.pmap:
-                    
-                    intersections_at_x = [i for i in self.data.intersections.values() if i.get_y() == y]
-
-                    closest_intersection_at_left = min((i for i in intersections_at_x if i.get_x() < x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
-                    closest_intersection_at_right = min((i for i in intersections_at_x if i.get_x() > x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
-                    
-                    # Intersection has to be walkable
-                    closest_intersection_at_left = None if (x-1, y) not in self.data.pmap else closest_intersection_at_left
-                    closest_intersection_at_right = None if (x+1, y) not in self.data.pmap else closest_intersection_at_right
-                    
-                    if closest_intersection_at_left:
-                        checkpoint.add_neighbour(closest_intersection_at_left)
-                        closest_intersection_at_left.add_neighbour(checkpoint)
-
-                    if closest_intersection_at_right:
-                        checkpoint.add_neighbour(closest_intersection_at_right)
-                        closest_intersection_at_right.add_neighbour(checkpoint)
 
         # List to keep track of all possible paths
         all_path_positions = []

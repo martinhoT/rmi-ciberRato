@@ -2,7 +2,7 @@ import math
 from typing import Callable, Dict, Iterable, List, Tuple
 from directions import Direction
 from graph import Node
-from robData import MovementData
+from robData import MovementData, RobData
 
 
 def map_to_text(positions: List[Tuple[int, int]], checkpoints: Dict[int, Tuple[int, int]]=None) -> List[str]:
@@ -85,16 +85,19 @@ def get_direction(compass: float) -> Direction:
     else:
         return Direction.W
 
+
 def round_pos(x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
     # Assumed that the robot is still in the starting position and hasn't updated it
     if not starting_position:
         return 0, 0
     return round(x-starting_position[0]), round(y-starting_position[1])
 
+
 def round_pos_to_intersection(x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
     if not starting_position:
         return 0, 0
     return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
+
 
 def get_direction_from_path(start: Node, end: Node) -> Direction:
 
@@ -111,6 +114,7 @@ def get_direction_from_path(start: Node, end: Node) -> Direction:
             return Direction.E
         else:
             return Direction.W
+
 
 def get_distance_to_closest_intersection_in_front_of_pos(
         position: Tuple[float, float],
@@ -137,6 +141,7 @@ def get_distance_to_closest_intersection_in_front_of_pos(
         distance for distance in map(intersection_in_front_distance, intersections) if distance > 0]
 
     return min(distance_of_intersections_in_front_of_me, default=None)
+
 
 def get_walkable_distance_to_closest_intersection_in_front_of_pos(
         position: Tuple[float, float],
@@ -168,6 +173,7 @@ def get_walkable_distance_to_closest_intersection_in_front_of_pos(
     
     return None
 
+
 def get_angle_to_track(compass: float):
     direction = get_direction(compass)
     return compass - \
@@ -195,8 +201,8 @@ def calculate_next_movement(
     current_in: Tuple[float, float], 
     movement: MovementData) -> MovementData:
 
-    current_in_left = current_in[0]
-    current_in_right = current_in[1]
+    current_in_left = max(-0.15, min(current_in[0], 0.15))
+    current_in_right = max(-0.15, min(current_in[1], 0.15))
 
     previous_out_left = movement.out[0]
     previous_out_right = movement.out[1]
@@ -220,3 +226,64 @@ def calculate_next_movement(
     angle = movement.angle + rot
 
     return MovementData((current_out_left, current_out_right), (x, y), angle)
+
+
+def update_checkpoints_neighbours(rdata: RobData):
+
+    # Obtain checkpoints neighbours
+    checkpoints = list(rdata.checkpoints.values())
+    for checkpoint in checkpoints:
+
+        coordinates = checkpoint.get_coordinates()
+        if coordinates in rdata.intersections:
+            intersection = rdata.intersections[coordinates]
+            neighbours = intersection.get_neighbours()
+            for neighbour in neighbours:
+                checkpoint.add_neighbour(neighbour)
+                neighbour.add_neighbour(checkpoint)
+
+        else:
+            
+            x = coordinates[0]
+            y = coordinates[1]
+
+            # Check if 0y
+            if (x, y-1) in rdata.pmap or (x, y+1) in rdata.pmap:
+
+                intersections_at_y = [i for i in rdata.intersections.values() if i.get_x() == x]
+
+                closest_intersection_at_down = min((i for i in intersections_at_y if i.get_y() < y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
+                closest_intersection_at_up = min((i for i in intersections_at_y if i.get_y() > y), key=lambda intersection: abs(intersection.get_y() - y), default=None)
+                
+                # Intersection has to be walkable
+                closest_intersection_at_down = None if (x, y-1) not in rdata.pmap else closest_intersection_at_down
+                closest_intersection_at_up = None if (x, y+1) not in rdata.pmap else closest_intersection_at_up
+                
+                if closest_intersection_at_down:
+                    checkpoint.add_neighbour(closest_intersection_at_down)
+                    closest_intersection_at_down.add_neighbour(checkpoint)
+
+                if closest_intersection_at_up:
+                    checkpoint.add_neighbour(closest_intersection_at_up)
+                    closest_intersection_at_up.add_neighbour(checkpoint)
+
+
+            # Check if 0x
+            elif (x-1, y) in rdata.pmap or (x+1, y) in rdata.pmap:
+                
+                intersections_at_x = [i for i in rdata.intersections.values() if i.get_y() == y]
+
+                closest_intersection_at_left = min((i for i in intersections_at_x if i.get_x() < x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
+                closest_intersection_at_right = min((i for i in intersections_at_x if i.get_x() > x), key=lambda intersection: abs(intersection.get_x() - x), default=None)
+                
+                # Intersection has to be walkable
+                closest_intersection_at_left = None if (x-1, y) not in rdata.pmap else closest_intersection_at_left
+                closest_intersection_at_right = None if (x+1, y) not in rdata.pmap else closest_intersection_at_right
+                
+                if closest_intersection_at_left:
+                    checkpoint.add_neighbour(closest_intersection_at_left)
+                    closest_intersection_at_left.add_neighbour(checkpoint)
+
+                if closest_intersection_at_right:
+                    checkpoint.add_neighbour(closest_intersection_at_right)
+                    closest_intersection_at_right.add_neighbour(checkpoint)

@@ -11,16 +11,16 @@ from utils import *
 
 
 LOG = True
-LOG_CLEAR = False
+LOG_CLEAR = True
 LOG_STARTING_POS = False
-LOG_INTENTION = True
+LOG_INTENTION = False
 LOG_SENSORS = True
-LOG_INTERSECTIONS = False
+LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = False
 LOG_GROUND = False
 LOG_CHECKPOINTS = False
-LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
-LOG_MAP = False
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
+LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
 
@@ -34,6 +34,8 @@ class Intention:
 
     def log_measured(self, measures: CMeasures, rdata: RobData):
         if LOG:
+            (x, y), position = self.obtain_position(measures, rdata)
+
             if LOG_CLEAR:
                 system('clear')
             if LOG_STARTING_POS:
@@ -41,7 +43,7 @@ class Intention:
             if LOG_INTENTION:
                 print(self)
             if LOG_SENSORS:
-                print(f'{measures.lineSensor} ({measures.x}, {measures.y}) -> ({round_pos(measures.x, measures.y, rdata.starting_position)})')
+                print(f'{measures.lineSensor} ({x:.3f}, {y:.3f}) -> ({position[0]:.3g}, {position[1]:.3g})')
             if LOG_INTERSECTIONS:
                 print('Intersections:')
                 for position, intersection in rdata.intersections.items():
@@ -51,7 +53,7 @@ class Intention:
                 print('Previous intersection:', rdata.previous_intersection)
             if LOG_CALCULATED_PATH:
                 print('Calculated Path:')
-                print('Robot Position:', round_pos(measures.x, measures.y, rdata.starting_position))
+                print('Robot Position:', position)
                 print('Next intersections:', rdata.path)
                 print('Next intentions:', rdata.intersections_intentions)
             if LOG_GROUND:
@@ -60,10 +62,10 @@ class Intention:
                 print('Checkpoints:', rdata.checkpoints)
             if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
                 print('Distance to known intersection ahead:', get_walkable_distance_to_closest_intersection_in_front_of_pos(
-                    (measures.x - rdata.starting_position[0], measures.y - rdata.starting_position[1]),
+                    (x - rdata.starting_position[0], y - rdata.starting_position[1]),
                     get_direction(measures.compass),
                     rdata.intersections, rdata.pmap,
-                    round_pos(measures.x, measures.y, rdata.starting_position)))
+                    position))
             if LOG_MAP and rdata.pmap:
                 for line in map_to_text(rdata.pmap):
                     print(''.join(line))
@@ -135,6 +137,34 @@ class Intention:
 
         return max_speed/velocity
 
+    def obtain_position(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], Tuple[int, int]]:
+
+        # Obtain position of robot in the map
+        if measures.gpsReady:
+            x, y = measures.x, measures.y
+            position = round_pos(measures.x, measures.y, rdata.starting_position)
+        else:
+            x, y = rdata.movement_guess.coordinates
+            position = estimate_pos(x, y, measures.compass, rdata.starting_position)
+            
+            # Update the movement guess
+            rdata.movement_guess.coordinates = position
+            
+        return (x, y), position
+
+    def set_route_to(self, key: Callable[[Node], bool], direction: Direction, start_node: Node, rdata: RobData):
+
+        # Wavefront expansion to find the path to the closest node satisfying the key function
+        path_to_closest = wavefront_expansion(start_node=start_node, key=key)
+
+        if path_to_closest:
+            path, _ = path_to_closest
+            rdata.intersections_intentions = self.calculate_moves(direction, path)
+            rdata.path = path[1:]
+            return rdata.intersections_intentions.pop(0)
+
+        return None
+
     def __str__(self): return self.__class__.__name__
     def __repr__(self): return str(self)
 
@@ -144,15 +174,7 @@ class Wander(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        # Obtain position of robot in the map
-        if measures.gpsReady:
-            position = round_pos(measures.x, measures.y, rdata.starting_position)
-        else:
-            coordinates = rdata.movement_guess.coordinates
-            position = estimate_pos(coordinates[0], coordinates[1], measures.compass, rdata.starting_position)
-            
-            # Update the movement guess
-            rdata.movement_guess.coordinates = position
+        (x, y), position = self.obtain_position(measures, rdata)
 
         if position not in rdata.pmap:
             rdata.pmap.append(position)
@@ -171,7 +193,7 @@ class Wander(Intention):
 
         # Save checkpoint if one was found
         if (measures.ground != -1) and measures.ground not in rdata.checkpoints:
-            checkpoint_pos = round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+            checkpoint_pos = round_pos_to_intersection(x, y, rdata.starting_position)
             checkpoint = Checkpoint(checkpoint_pos[0], checkpoint_pos[1], measures.ground)
             rdata.checkpoints[measures.ground] = checkpoint
             
@@ -179,7 +201,8 @@ class Wander(Intention):
         if self.check_if_intersection(measures.lineSensor):
 
             # Adjust position to the closest possible intersection
-            intersection_pos = round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+
+            intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position)
 
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
@@ -195,7 +218,7 @@ class Wander(Intention):
         velocity_modifier = 1
         if SPEED_OPTIMIZATIONS:
             closest_distance = get_walkable_distance_to_closest_intersection_in_front_of_pos(
-                position=(measures.x - rdata.starting_position[0], measures.y - rdata.starting_position[1]),
+                position=(x - rdata.starting_position[0], y - rdata.starting_position[1]),
                 direction=direction, intersections=rdata.intersections, pmap=rdata.pmap, rounded_position=position)
 
             if closest_distance:
@@ -270,12 +293,15 @@ class CheckIntersectionForwardBacktrack(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
+        (x, y), _ = self.obtain_position(measures, rdata)
+
         # If the robot is back at the intersection
         if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
             
             for found_direction in self.found_directions:
 
-                intersection = round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+                intersection = round_pos_to_intersection(x, y, rdata.starting_position)
+                # TODO: problem here, intersection key error!
                 rdata.intersections[intersection].add_path( found_direction )
             rdata.intersections[intersection].add_path( opposite_direction(get_direction(measures.compass)) )
 
@@ -289,7 +315,9 @@ class TurnIntersection(Intention):
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        intersection_pos = round_pos_to_intersection(measures.x, measures.y, rdata.starting_position)
+        (x, y), _ = self.obtain_position(measures, rdata)
+
+        intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position)
         direction = get_direction(measures.compass)
         intersection = rdata.intersections[intersection_pos]
 
@@ -314,16 +342,13 @@ class TurnIntersection(Intention):
             non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
             if not non_visited_paths:
 
-                # Wavefront expansion to find the path to the closest intersection with non-visited paths
-                path_to_closest_intersection = wavefront_expansion(
+                # Use wavefront expansion to find the path to the closest intersection with non-visited paths
+                next_intention = self.set_route_to(
+                    key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()),
+                    direction=direction,
                     start_node=intersection,
-                    key=lambda n: isinstance(n, Intersection) and (n.get_possible_paths() - n.get_visited_paths()))
-
-                if path_to_closest_intersection:
-                    path, _ = path_to_closest_intersection
-                    rdata.intersections_intentions = self.calculate_moves(direction, path)
-                    rdata.path = path[1:]
-                    next_intention = rdata.intersections_intentions.pop(0)
+                    rdata=rdata
+                )
             
             # If there are non-visited paths to take
             else:
@@ -430,11 +455,30 @@ class PrepareFinish(Intention):
         self.prepare = prepare
     
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
+        self.log_measured(measures, rdata)
+
         if not self.prepare:
             return None, Finish()
         
-        # TODO: go back to the starting place
-        pass
+        (x, y), position = self.obtain_position(measures, rdata)
+        position = round_pos(position[0], position[1], rdata.starting_position)
+
+        if position == rdata.starting_position:
+            return (0.0, 0.0), Finish()
+        
+        current_intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position)
+        current_intersection = rdata.intersections[current_intersection_pos]
+
+        # Calculate route to the starting position
+        # TODO: the starting position checkpoint doesn't have neighbours
+        next_intention = self.set_route_to(
+            key=lambda n: isinstance(n, Checkpoint) and n.get_coordinates() == rdata.starting_position,
+            direction=get_direction(measures.compass),
+            start_node=current_intersection,
+            rdata=rdata,
+        )
+        
+        return None, next_intention
 
 
 class Finish(Intention):
