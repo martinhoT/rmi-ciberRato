@@ -13,7 +13,6 @@ from robData import MovementData, RobData
 CELLROWS=7
 CELLCOLS=14
 
-# TODO: test with custom maps containing large corridors (to check if movement guess is correct)
 class MyRob(CRobLinkAngs):
     def __init__(self, robName, rob_id, angles, host, fname='robC2'):
         CRobLinkAngs.__init__(self, robName, rob_id, angles, host)
@@ -124,7 +123,7 @@ class MyRob(CRobLinkAngs):
 
         # Save final map
         with open(self.fname + ".map", "w") as file:
-            for line in map_to_text(self.data.pmap):
+            for line in map_to_text(self.data.pmap, {i:checkpoint.get_coordinates() for i, checkpoint in self.data.checkpoints.items()}):
                 print(''.join(line), file=file)
 
         # Obtain checkpoints
