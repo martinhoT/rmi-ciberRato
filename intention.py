@@ -61,6 +61,7 @@ class Intention:
                 print('Ground:', measures.ground)
             if LOG_CHECKPOINTS:
                 print('Checkpoints:', rdata.checkpoints)
+            # TODO: not being detected properly
             if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
                 print('Distance to known intersection ahead:', get_walkable_distance_to_closest_intersection_in_front_of_pos(
                     (x - rdata.starting_position[0], y - rdata.starting_position[1]),
@@ -384,7 +385,7 @@ class TurnIntersection(Intention):
                     next_intention = Rotate(direction, available)
 
                 # Add chosen path
-                intersection.add_visited_path(available)
+                # intersection.add_visited_path(available)
 
         # If no path was explicitly chosen, then take a random path from the available paths (to avoid loops)
         if not next_intention:
