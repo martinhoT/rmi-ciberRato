@@ -271,6 +271,7 @@ class CheckIntersectionForward(Intention):
         direction = get_direction(measures.compass)
         next_intention = None
 
+        # TODO: consistency with how CheckIntersectionForwardBacktrack checks it? (2-5 -> 3-4)
         if all(ls == '1' for ls in measures.lineSensor[:2]):
             self.found_directions.add(left_direction(direction))
 
@@ -303,6 +304,7 @@ class CheckIntersectionForwardBacktrack(Intention):
         self.log_measured(measures, rdata)
 
         (x, y), _ = self.obtain_position(measures, rdata)
+        direction = get_direction(measures.compass)
         # Update the movement guess
         if not measures.gpsReady:
             rdata.movement_guess.coordinates = (x, y)
@@ -317,6 +319,13 @@ class CheckIntersectionForwardBacktrack(Intention):
         # If the robot is back at the intersection
         if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
             
+            if (all(ls == '1' for ls in measures.lineSensor[:3]) and left_direction(direction) not in self.found_directions) \
+                    or (all(ls == '1' for ls in measures.lineSensor[4:]) and right_direction(direction) not in self.found_directions):
+                intersection = round_pos_to_intersection(x, y, rdata.starting_position)
+                rdata.intersections.pop(intersection)
+
+                return (0.0, 0.0), Wander()
+
             for found_direction in self.found_directions:
 
                 intersection = round_pos_to_intersection(x, y, rdata.starting_position)
