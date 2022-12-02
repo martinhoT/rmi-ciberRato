@@ -60,12 +60,9 @@ class MyRob(CRobLinkAngs):
         if isinstance(next_intention, PrepareFinish):
             update_checkpoints_neighbours(self.data)
 
-        # TODO: band-aid fix (check for the actual cause of the problem, it might not follow the correct path)
+        # TODO: it might not follow the correct path, check for the cause of the problem
         if isinstance(self.intention, Finish):
-            _, position = self.obtain_position(self.measures, self.data)
-            position = round_pos(position[0], position[1], self.data.starting_position)
-
-            return position == self.data.starting_position
+            return True
 
         if next_intention:
             self.intention = next_intention

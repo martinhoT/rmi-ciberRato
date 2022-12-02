@@ -124,11 +124,25 @@ def get_direction_from_path(start: Node, end: Node) -> Direction:
             return Direction.W
 
 
+def walk_in_direction(position: Tuple[float, float], 
+        direction: Direction,
+        steps: int) -> Tuple[int, int]:
+
+    walk = {
+        Direction.E: lambda p, s: (p[0] + s, p[1]),
+        Direction.W: lambda p, s: (p[0] - s, p[1]),
+        Direction.N: lambda p, s: (p[0], p[1] + s),
+        Direction.S: lambda p, s: (p[0], p[1] - s),
+    }[direction]
+    
+    return walk(position, steps)
+
+
 def get_distance_to_closest_intersection_in_front_of_pos(
         position: Tuple[float, float],
         direction: Direction,
         intersections: Iterable[Tuple[int, int]],
-        rounded_position: Tuple[int, int]=None) -> float:
+        rounded_position: Tuple[int, int]=None) -> Tuple[float, Tuple[int, int]]:
 
     # The position is already rounded
     if not rounded_position:
