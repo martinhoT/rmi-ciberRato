@@ -360,8 +360,29 @@ class TurnIntersection(Intention):
         
         # If not, choose a path to take
         else:
-            # If the robot already took all possible paths (at least once)
+            # Check for redundant paths, and consider them to be visited
             non_visited_paths = intersection.get_possible_paths() - intersection.get_visited_paths()
+            available_paths = [(available, get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, available, rdata.intersections))
+                        for available in non_visited_paths]
+                
+            for path, distance in available_paths:
+                if distance == 2:
+                    # Update pmap
+                    map_position = walk_in_direction(intersection_pos, path, 1)
+                    rdata.pmap.append(map_position)
+
+                    # Update visited paths
+                    other_intersection_pos = walk_in_direction(intersection_pos, path, 2)
+                    other_intersection = rdata.intersections[other_intersection_pos]
+                    other_intersection.add_visited_path(opposite_direction(path))
+                    other_intersection.add_neighbour(intersection)
+                        
+                    intersection.add_visited_path(path)
+                    intersection.add_neighbour(other_intersection)
+
+                    non_visited_paths.remove(path)
+
+            # If the robot already took all possible paths (at least once)
             if not non_visited_paths:
 
                 # Use wavefront expansion to find the path to the closest intersection with non-visited paths
@@ -374,18 +395,15 @@ class TurnIntersection(Intention):
             
             # If there are non-visited paths to take
             else:
-                available_paths = [(available, get_distance_to_closest_intersection_in_front_of_pos(intersection_pos, available, rdata.intersections))
-                        for available in non_visited_paths]
-                available, _ = min(available_paths, key=lambda t: t[1] if t[1] is not None else 10)
+
+                suitable_paths = [(path, distance) for path, distance in available_paths if not distance or distance > 2]
+                available, _ = min(suitable_paths, key=lambda t: t[1] if t[1] is not None else 10)
                 
                 next_intention = None
                 if direction == available:
                     next_intention = MoveForward()
                 else:
                     next_intention = Rotate(direction, available)
-
-                # Add chosen path
-                # intersection.add_visited_path(available)
 
         # If no path was explicitly chosen, then take a random path from the available paths (to avoid loops)
         if not next_intention:
