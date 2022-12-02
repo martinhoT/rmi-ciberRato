@@ -7,7 +7,7 @@ from directions import opposite_direction
 
 from graph import Checkpoint
 from intention import Rotate, Finish, PrepareFinish
-from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
+from utils import get_direction, map_to_text, round_pos, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
 from robData import MovementData, RobData
 
 CELLROWS=7
@@ -60,8 +60,12 @@ class MyRob(CRobLinkAngs):
         if isinstance(next_intention, PrepareFinish):
             update_checkpoints_neighbours(self.data)
 
+        # TODO: band-aid fix (check for the actual cause of the problem, it might not follow the correct path)
         if isinstance(self.intention, Finish):
-            return True
+            _, position = self.obtain_position(self.measures, self.data)
+            position = round_pos(position[0], position[1], self.data.starting_position)
+
+            return position == self.data.starting_position
 
         if next_intention:
             self.intention = next_intention
