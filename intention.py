@@ -290,8 +290,11 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction]):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=8):
         super().__init__()
+        self.steps = 0
+        # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
+        self.max_steps = max_steps
         self.intersection_pos = intersection_pos
         self.found_directions = found_directions
 
@@ -303,17 +306,27 @@ class CheckIntersectionForwardBacktrack(Intention):
         if not measures.gpsReady:
             rdata.movement_guess.coordinates = (x, y)
 
+        # Intersection probably found by noise
+        if self.steps == self.max_steps:
+            intersection = round_pos_to_intersection(x, y, rdata.starting_position)
+            rdata.intersections.pop(intersection)
+
+            return (0.0, 0.0), Wander()
+
         # If the robot is back at the intersection
         if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
             
             for found_direction in self.found_directions:
 
                 intersection = round_pos_to_intersection(x, y, rdata.starting_position)
-                # TODO: problem here, intersection key error!
                 rdata.intersections[intersection].add_path( found_direction )
             rdata.intersections[intersection].add_path( opposite_direction(get_direction(measures.compass)) )
+            
+            # rdata.intersections[intersection].add_visited_path( opposite_direction(get_direction(measures.compass)) )
 
             return (self.velocity, self.velocity), TurnIntersection()
+
+        self.steps += 1
 
         return (-self.velocity, -self.velocity), None
 
