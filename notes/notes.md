@@ -40,6 +40,7 @@ o
 ### Problems
 
 - `intention`: the distance to the known intersection ahead is not correct
+- Imprecisions if the lineSensor is a bit after the robot's center, incorrectly detecting intersections (`C4XL-off-start_key-error-intersection_30-cycles.mkv`). Consider offsetting something (?) by the distance to the robot's center above.
 - `robC4`: If the starting position is not an intersection, the `Finish` intention will not be triggered in the end
 
 #### Issues to be aware of (but no need to fix)
