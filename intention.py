@@ -11,7 +11,7 @@ from utils import *
 
 
 LOG = True
-LOG_CLEAR = False
+LOG_CLEAR = True
 LOG_STARTING_POS = False
 LOG_INTENTION = True
 LOG_SENSORS = True
@@ -44,7 +44,7 @@ class Intention:
             if LOG_INTENTION:
                 print(self)
             if LOG_SENSORS:
-                print(f'{measures.lineSensor} ({x:.3f}, {y:.3f}) -> ({position[0]:.3g}, {position[1]:.3g})')
+                print(f'{measures.lineSensor} ({x:.3f}, {y:.3f}) -> ({position[0]:.3g}, {position[1]:.3g}) | {measures.compass} -> {get_direction(measures.compass)}')
             if LOG_INTERSECTIONS:
                 print('Intersections:')
                 for position, intersection in rdata.intersections.items():
@@ -169,7 +169,6 @@ class Intention:
     def __repr__(self): return str(self)
 
 
-# TODO: intersection optimization: connect neighbor dots so we don't need to explicitly travel through them
 class Wander(Intention):
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
