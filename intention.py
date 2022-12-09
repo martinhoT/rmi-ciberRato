@@ -215,7 +215,7 @@ class Wander(Intention):
             
             # When the robot data suggests that the challenge has been finished
             if rdata.finished():
-                return (0.0, 0.0), PrepareFinish(prepare=rdata.prepare_before_finish)
+                return (0.0, 0.0), (PrepareFinish() if rdata.prepare_before_finish else Finish())
 
             return None, TurnIntersection()
             
@@ -498,21 +498,18 @@ class TurnBack(Intention):
 
 class PrepareFinish(Intention):
 
-    def __init__(self, prepare: bool=True):
-        super().__init__()
-        self.prepare = prepare
-    
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        if not self.prepare:
-            return None, Finish()
+        def at_starting_position(rdata: RobData):
+            position_unsnapped = rdata.movement_guess.coordinates
+            position = round_pos(*position_unsnapped, rdata.starting_position)
+            return position == rdata.starting_position
+        
+        rdata.finish_condition = at_starting_position
+        rdata.prepare_before_finish = False
         
         (x, y), position = self.obtain_position(measures, rdata)
-        position = round_pos(position[0], position[1], rdata.starting_position)
-
-        if position == rdata.starting_position:
-            return (0.0, 0.0), Finish()
         
         current_intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position)
         current_intersection = rdata.intersections[current_intersection_pos]
@@ -525,8 +522,6 @@ class PrepareFinish(Intention):
             rdata=rdata,
         )
 
-        rdata.intersections_intentions.append(Finish())
-        
         return None, next_intention
 
 
