@@ -15,11 +15,16 @@ o
 o
 ```
 
+Line sensor:
 - Line width: 0.2
 - Distance to robot's center: 0.438
+
+Robot:
 - Diameter: 1.0
-- Cell width: 2.0
 - Max speed: 0.15
+
+Map:
+- Cell width: 2.0
 
 ### Tools
 

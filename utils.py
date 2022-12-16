@@ -5,6 +5,8 @@ from graph import Node
 from robData import MovementData, RobData
 
 
+CENTER_TO_LINE_SENSOR = 0.438
+
 def map_to_text(positions: List[Tuple[int, int]],
         checkpoints: Dict[int, Tuple[int, int]]=None,
         intersections: List[Tuple[int, int]]=None) -> List[str]:
@@ -101,9 +103,10 @@ def round_pos(x: float, y: float, starting_position: Tuple[float, float]) -> Tup
     return round(x-starting_position[0]), round(y-starting_position[1])
 
 
-def round_pos_to_intersection(x: float, y: float, starting_position: Tuple[float, float]) -> Tuple[int, int]:
+def round_pos_to_intersection(x: float, y: float, starting_position: Tuple[float, float], direction: Direction) -> Tuple[int, int]:
     if not starting_position:
         return 0, 0
+    x, y = walk_in_direction((x, y), direction, CENTER_TO_LINE_SENSOR)   # align robot's center to the intersection
     return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
 
 
@@ -126,7 +129,7 @@ def get_direction_from_path(start: Node, end: Node) -> Direction:
 
 def walk_in_direction(position: Tuple[float, float], 
         direction: Direction,
-        steps: int) -> Tuple[int, int]:
+        steps: float) -> Tuple[float, float]:
 
     walk = {
         Direction.E: lambda p, s: (p[0] + s, p[1]),
