@@ -189,6 +189,10 @@ class Wander(Intention):
         if (n_active == 0):
             return (0.0, 0.0), TurnBack()
 
+        # When the robot data suggests that the challenge has been finished
+        if rdata.finished():
+            return (0.0, 0.0), (PrepareFinish() if rdata.prepare_before_finish else Finish())
+
         # Line Sensors detected a discontinuity
         # TODO: revisit this, see possibly better/more robust ways to handle noise
         if self.line_sensor_discontinuity(measures.lineSensor):
@@ -211,10 +215,6 @@ class Wander(Intention):
             if intersection_pos not in rdata.intersections:
                 next_intention = self.create_intersection(intersection_pos, rdata.intersections)
                 return (0.0, 0.0), next_intention
-            
-            # When the robot data suggests that the challenge has been finished
-            if rdata.finished():
-                return (0.0, 0.0), (PrepareFinish() if rdata.prepare_before_finish else Finish())
 
             return None, TurnIntersection()
             
@@ -508,7 +508,7 @@ class PrepareFinish(Intention):
             return position == rdata.starting_position
         
         rdata.finish_condition = at_starting_position
-        rdata.prepare_before_finish = 3
+        rdata.prepare_before_finish = False
         
         (x, y), position = self.obtain_position(measures, rdata)
         

@@ -44,9 +44,8 @@ Map:
 
 ### Problems
 
-- `intention`: the distance to the known intersection ahead is not correct
-- Imprecisions if the lineSensor is a bit after the robot's center, incorrectly detecting intersections (`C4XL-off-start_key-error-intersection_30-cycles.mkv`). Consider offsetting something (?) by the distance to the robot's center above.
-- `robC4`: If the starting position is not an intersection, the `Finish` intention will not be triggered in the end
+- `intention`: Make future intersection detections robust, so that previously incorrectly detected directions are discarded
+✓ `robC4`: If the starting position is not an intersection, the `Finish` intention will not be triggered in the end
 
 #### Issues to be aware of (but no need to fix)
 
@@ -54,7 +53,13 @@ Map:
 
 ### Optimizations
 
+- `intention`: the distance to the known intersection ahead is not correct
 - `intention`: there is an inconsitency with which values of the `lineSensor` are evaluated in `CheckIntersectionForwardBacktrack`
 - `intention`: the speed up function is not the best (speed up beyong `0.15` doesn't work in practice, heavily braking when not needed)
 - `intention`: path calculation to finish may happen 1 intersection later
 - Prioritize heading into directions that are closer to the map's borders
+
+### Refactoring
+
+- Generify the `PrepareFinish` and `Finish` states to allow for a chain of finish conditions to be set
+- Add ground sensor measure to detect when at starting position
