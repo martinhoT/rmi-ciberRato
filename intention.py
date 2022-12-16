@@ -504,7 +504,6 @@ class PrepareFinish(Intention):
         def at_starting_position(rdata: RobData):
             position_unsnapped = rdata.movement_guess.coordinates
             position = round_pos(*position_unsnapped, rdata.starting_position)
-            print('!!!', position, rdata.starting_position)
             return position == rdata.starting_position
         
         rdata.finish_condition = at_starting_position
