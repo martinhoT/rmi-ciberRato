@@ -1,7 +1,7 @@
 import random
 
 from os import system
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Sequence
 from croblink import CMeasures
 from graph import Checkpoint, Intersection, Node
 from robData import RobData
@@ -19,7 +19,7 @@ LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = True
 LOG_GROUND = False
 LOG_CHECKPOINTS = False
-LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
 LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = False
@@ -184,9 +184,22 @@ class Wander(Intention):
 
         direction = get_direction(measures.compass)
 
-        # Robot is off track
+        # Robot is off track, add dead end to intersections
         n_active = measures.lineSensor.count("1")
         if (n_active == 0):
+
+            # Adjust position to the closest possible intersection
+            intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, None)
+
+            # If the intersection is not in the map, add it
+            if intersection_pos not in rdata.intersections:
+                intersection = self.create_intersection(intersection_pos, rdata.intersections)
+
+                intersection.add_path(opposite_direction(direction))
+                rdata.previous_intersection = intersection
+
+                self.update_neighbours(intersection, rdata)
+
             return (0.0, 0.0), TurnBack()
 
         # When the robot data suggests that the challenge has been finished
@@ -213,8 +226,9 @@ class Wander(Intention):
 
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
-                next_intention = self.create_intersection(intersection_pos, rdata.intersections)
-                return (0.0, 0.0), next_intention
+                self.create_intersection(intersection_pos, rdata.intersections)
+
+                return (0.0, 0.0), CheckIntersectionForward(intersection_pos)
 
             return None, TurnIntersection()
             
@@ -236,12 +250,12 @@ class Wander(Intention):
         return (action[0]*velocity_modifier, action[1]*velocity_modifier), None
     
     def create_intersection(self, intersection_pos: Tuple[int, int],
-            intersection_list: Dict[Tuple[int, int], Intersection]) -> Intention:
+            intersection_list: Dict[Tuple[int, int], Intersection]) -> Intersection:
         
         intersection = Intersection(intersection_pos[0], intersection_pos[1])
         intersection_list[intersection_pos] = intersection
 
-        return CheckIntersectionForward(intersection_pos)
+        return intersection
 
     def check_if_intersection(self, lineSensor: List[str]) -> bool:
 
@@ -289,7 +303,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=10, sample_loop: SampleLoop=None):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=4, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
@@ -297,40 +311,32 @@ class CheckIntersectionForwardBacktrack(Intention):
         self.intersection_pos = intersection_pos
         self.found_directions = found_directions
 
+        self.sample_loop = sample_loop
+
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
         (x, y), _ = self.obtain_position(measures, rdata)
         direction = get_direction(measures.compass)
+        
+        # Check if path forward exists
+        if self.sample_loop and direction not in self.found_directions and self.sample_loop.lineSensor.count('1') != 0:
+            self.found_directions.add(direction)
+        
         # Update the movement guess
         if not measures.gpsReady:
             rdata.movement_guess.coordinates = (x, y)
 
-        # Intersection probably found by noise
-        if self.steps == self.max_steps:
-            intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
-            rdata.intersections.pop(intersection)
-
-            return (0.0, 0.0), Wander()
+        intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
 
         # If the robot is back at the intersection
-        if all(ls == '1' for ls in measures.lineSensor[:3]) or all(ls == '1' for ls in measures.lineSensor[4:]):
+        if self.steps == self.max_steps:
             
-            if (all(ls == '1' for ls in measures.lineSensor[:3]) and left_direction(direction) not in self.found_directions) \
-                    or (all(ls == '1' for ls in measures.lineSensor[4:]) and right_direction(direction) not in self.found_directions):
-                intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
-                rdata.intersections.pop(intersection)
-
-                return (0.0, 0.0), Wander()
-
             for found_direction in self.found_directions:
-
-                intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
                 rdata.intersections[intersection].add_path( found_direction )
-            rdata.intersections[intersection].add_path( opposite_direction(get_direction(measures.compass)) )
+                
+            rdata.intersections[intersection].add_path( opposite_direction(direction) )
             
-            # rdata.intersections[intersection].add_visited_path( opposite_direction(get_direction(measures.compass)) )
-
             return (self.velocity, self.velocity), TurnIntersection()
 
         self.steps += 1
@@ -501,13 +507,26 @@ class SampleLoop(Intention):
         self.next_intention = next_intention
         self.next_intention_args = args
         self.next_intention_kwargs = kwargs
+        self.n_samples = 3
+        self.n_samples_counter = 0
 
         self.lineSensor = []
 
+    def most_common(self, l: Sequence[str]) -> str:
+        return '0' if l.count('0') > self.n_samples / 2 else '1'
+
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
+        self.log_measured(measures, rdata)
+
         self.lineSensor.append(measures.lineSensor)
+        self.n_samples_counter += 1
         
-        return (0.0, 0.0), self.next_intention(*self.next_intention_args, **self.next_intention_kwargs)
+        if rdata.expected_noise and self.n_samples_counter < self.n_samples:
+            return (0.0, 0.0), None
+        
+        self.lineSensor = [self.most_common(samples) for samples in zip(*self.lineSensor)]
+        
+        return (0.0, 0.0), self.next_intention(*self.next_intention_args, **self.next_intention_kwargs, sample_loop=self)
 
 
 class PrepareFinish(Intention):

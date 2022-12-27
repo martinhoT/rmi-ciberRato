@@ -106,7 +106,8 @@ def round_pos(x: float, y: float, starting_position: Tuple[float, float]) -> Tup
 def round_pos_to_intersection(x: float, y: float, starting_position: Tuple[float, float], direction: Direction) -> Tuple[int, int]:
     if not starting_position:
         return 0, 0
-    x, y = walk_in_direction((x, y), direction, CENTER_TO_LINE_SENSOR)   # align robot's center to the intersection
+    if direction:
+        x, y = walk_in_direction((x, y), direction, CENTER_TO_LINE_SENSOR)   # align robot's center to the intersection
     return round((x-starting_position[0])/2)*2, round((y-starting_position[1])/2)*2
 
 
