@@ -197,7 +197,7 @@ class Wander(Intention):
         # TODO: revisit this, see possibly better/more robust ways to handle noise
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
-            return (0.0, 0.0), None
+            return (self.velocity / 5, self.velocity / 5), None
 
         # Save checkpoint if one was found
         if (measures.ground != -1) and measures.ground not in rdata.checkpoints:
