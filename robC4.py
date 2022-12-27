@@ -7,7 +7,7 @@ from directions import opposite_direction
 
 from graph import Checkpoint
 from intention import Rotate, Finish, PrepareFinish
-from utils import get_direction, map_to_text, round_pos, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
+from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
 from robData import MovementData, RobData
 
 CELLROWS=7
@@ -29,7 +29,8 @@ class MyRob(CRobLinkAngs):
             starting_position=starting_position,
             finish_condition=exhausted_intersections,
             prepare_before_finish=True,
-            movement_guess=MovementData((0, 0), starting_position, starting_angle)
+            movement_guess=MovementData((0, 0), starting_position, starting_angle),
+            expected_noise=0.01,
         )
         self.intention = None
         self.fname = fname

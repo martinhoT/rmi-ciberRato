@@ -24,6 +24,7 @@ class RobData:
     prepare_before_finish:      bool                                = field(default=False)
     movement_guess:             MovementData                        = field(default_factory=MovementData)
     previous_action:            Tuple[float, float]                 = field(default=(0.0, 0.0))
+    expected_noise:             float                               = field(default=0.0)
 
     def finished(self) -> bool:
         """When the robot data suggests that the challenge has been finished. Dependent on the provided finish condition."""

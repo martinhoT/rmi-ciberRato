@@ -280,8 +280,7 @@ class CheckIntersectionForward(Intention):
             next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, self.found_directions)
 
         if self.test_steps == 0:
-            self.found_directions.add(direction)
-            next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, self.found_directions)
+            next_intention = SampleLoop(CheckIntersectionForwardBacktrack, self.intersection_pos, self.found_directions)
 
         self.test_steps -= 1
 
@@ -290,7 +289,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=10):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=10, sample_loop: SampleLoop=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
@@ -494,6 +493,21 @@ class TurnBack(Intention):
             return (0.0, 0.0), Wander()
         
         return (self.velocity, -self.velocity), TurnBack()
+
+
+class SampleLoop(Intention):
+
+    def __init__(self, next_intention: Intention, *args, **kwargs):
+        self.next_intention = next_intention
+        self.next_intention_args = args
+        self.next_intention_kwargs = kwargs
+
+        self.lineSensor = []
+
+    def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
+        self.lineSensor.append(measures.lineSensor)
+        
+        return (0.0, 0.0), self.next_intention(*self.next_intention_args, **self.next_intention_kwargs)
 
 
 class PrepareFinish(Intention):
