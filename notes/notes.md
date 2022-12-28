@@ -53,9 +53,9 @@ Map:
 
 ### Optimizations
 
-- `intention`: the distance to the known intersection ahead is not correct
+✓ `intention`: the distance to the known intersection ahead is not correct
 ✓ `intention`: there is an inconsitency with which values of the `lineSensor` are evaluated in `CheckIntersectionForwardBacktrack`
-- `intention`: the speed up function is not the best (speed up beyond `0.15` doesn't work in practice, heavily braking when not needed)
+✓ `intention`: the speed up function is not the best (speed up beyond `0.15` doesn't work in practice, heavily braking when not needed)
 - `intention`: path calculation to finish may happen 1 intersection later
 - Prioritize heading into directions that are closer to the map's borders
 
