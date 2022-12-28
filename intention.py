@@ -61,7 +61,6 @@ class Intention:
                 print('Ground:', measures.ground)
             if LOG_CHECKPOINTS:
                 print('Checkpoints:', rdata.checkpoints)
-            # TODO: not being detected properly
             if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
                 print('Distance to known intersection ahead:', get_walkable_distance_to_closest_intersection_in_front_of_pos(
                     (x - rdata.starting_position[0], y - rdata.starting_position[1]),
@@ -207,7 +206,6 @@ class Wander(Intention):
             return (0.0, 0.0), (PrepareFinish() if rdata.prepare_before_finish else Finish())
 
         # Line Sensors detected a discontinuity
-        # TODO: revisit this, see possibly better/more robust ways to handle noise
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
             return (self.velocity / 5, self.velocity / 5), None
@@ -283,7 +281,6 @@ class CheckIntersectionForward(Intention):
         direction = get_direction(measures.compass)
         next_intention = None
 
-        # TODO: consistency with how CheckIntersectionForwardBacktrack checks it? (2-5 -> 3-4)
         if all(ls == '1' for ls in measures.lineSensor[:2]):
             self.found_directions.add(left_direction(direction))
 

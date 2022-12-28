@@ -61,8 +61,6 @@ class MyRob(CRobLinkAngs):
         if isinstance(next_intention, PrepareFinish):
             update_checkpoints_neighbours(self.data)
 
-        # TODO: it might not follow the correct path, check for the cause of the problem
-        # TODO: Finish at non-intersection doesn't work, the path doesn't end there
         if isinstance(self.intention, Finish):
             return True
 
