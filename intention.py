@@ -19,10 +19,10 @@ LOG_INTERSECTIONS = True
 LOG_CALCULATED_PATH = True
 LOG_GROUND = False
 LOG_CHECKPOINTS = False
-LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = False
+LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD = True
 LOG_MAP = True
 
-SPEED_OPTIMIZATIONS = False
+SPEED_OPTIMIZATIONS = True
 
 class Intention:
 
@@ -47,10 +47,10 @@ class Intention:
                 print(f'{measures.lineSensor} ({x:.3f}, {y:.3f}) -> ({position[0]:.3g}, {position[1]:.3g}) | {measures.compass} -> {get_direction(measures.compass)}')
             if LOG_INTERSECTIONS:
                 print('Intersections:')
-                for position, intersection in rdata.intersections.items():
+                for intersection_pos, intersection in rdata.intersections.items():
                     not_visited = intersection.get_possible_paths() - intersection.get_visited_paths()
                     if not_visited:
-                        print(position, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
+                        print(intersection_pos, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
                 print('Previous intersection:', rdata.previous_intersection)
             if LOG_CALCULATED_PATH:
                 print('Calculated Path:')
@@ -62,6 +62,8 @@ class Intention:
             if LOG_CHECKPOINTS:
                 print('Checkpoints:', rdata.checkpoints)
             if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
+                print('Position:', (x - rdata.starting_position[0], y - rdata.starting_position[1]))
+                print('Rounded position:', position)
                 print('Distance to known intersection ahead:', get_walkable_distance_to_closest_intersection_in_front_of_pos(
                     (x - rdata.starting_position[0], y - rdata.starting_position[1]),
                     get_direction(measures.compass),
@@ -116,25 +118,16 @@ class Intention:
 
         return moves
     
-    def speed_up_func(self, x, max_speed, velocity, slow_down_portion, speed_up_portion) -> float:
+    def speed_up_func(self, x, max_speed, velocity, slow_down_portion) -> float:
         a, b = slow_down_portion
-        c, d = speed_up_portion
         
         if x < b:
             value = (max_speed - velocity)/velocity
             local_x = (x - a)/(b - a)
 
             if x < b - (b - a)/2:
-                return 1 - value * 2**(20 * local_x - 11)
-            return 1 - value * (1-2**(-20 * local_x + 9))
-
-        elif x > c:
-            value = (max_speed - velocity)/velocity
-            local_x = (x - c)/(d - c)
-
-            if x < d - (d - c)/2:
-                return (max_speed/velocity) + value * 2**(20 * local_x - 11)
-            return (max_speed/velocity) + value * (1-2**(-20 * local_x + 9))
+                return 1 + value * 2**(20 * local_x - 11)
+            return 1 + value * (1-2**(-20 * local_x + 9))
 
         return max_speed/velocity
 
@@ -143,11 +136,10 @@ class Intention:
         # Obtain position of robot in the map
         if measures.gpsReady:
             x, y = measures.x, measures.y
-            position = round_pos(measures.x, measures.y, rdata.starting_position)
         else:
             x, y = rdata.movement_guess.coordinates
             x, y = estimate_pos(x, y, measures.compass, rdata.starting_position)
-            position = round_pos(x, y, rdata.starting_position)
+        position = round_pos(x, y, rdata.starting_position)
             
         return (x, y), position
 
@@ -236,13 +228,11 @@ class Wander(Intention):
                 position=(x - rdata.starting_position[0], y - rdata.starting_position[1]),
                 direction=direction, intersections=rdata.intersections, pmap=rdata.pmap, rounded_position=position)
 
-            # TODO: do this better, it brakes when not needed
             if closest_distance:
                 max_speed = 0.15
-                slow_down_portion = (0.8, 1.0)
-                speed_up_portion = (1.5, 2.0)
+                slow_down_portion = (1.0, 1.5)
 
-                velocity_modifier = self.speed_up_func(closest_distance, max_speed, self.velocity, slow_down_portion, speed_up_portion)
+                velocity_modifier = self.speed_up_func(closest_distance, max_speed, self.velocity, slow_down_portion)
 
         action = self.follow_path(measures)
         return (action[0]*velocity_modifier, action[1]*velocity_modifier), None
@@ -300,7 +290,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=4, sample_loop: 'SampleLoop'=None):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=5, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
@@ -329,6 +319,12 @@ class CheckIntersectionForwardBacktrack(Intention):
         # If the robot is back at the intersection
         if self.steps == self.max_steps:
             
+            # TODO: temporary fix that may not be needed when doing SampleLoop before CheckIntersectionForward
+            # Redundant intersection (only move forward). Remove since it affects the speed up calculation
+            if left_direction(direction) not in self.found_directions and right_direction(direction) not in self.found_directions:
+                rdata.intersections.pop(intersection)
+                return (self.velocity, self.velocity), Wander()
+
             for found_direction in self.found_directions:
                 rdata.intersections[intersection].add_path( found_direction )
                 
