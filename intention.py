@@ -53,8 +53,6 @@ class Intention:
                         print(intersection_pos, "- Not Visited:" , not_visited, "- Neighbours:", intersection.get_neighbours())
                 print('Previous intersection:', rdata.previous_intersection)
             if LOG_CALCULATED_PATH:
-                print('Calculated Path:')
-                print('Robot Position:', position)
                 print('Next intersections:', rdata.path)
                 print('Next intentions:', rdata.intersections_intentions)
             if LOG_GROUND:
@@ -62,8 +60,6 @@ class Intention:
             if LOG_CHECKPOINTS:
                 print('Checkpoints:', rdata.checkpoints)
             if LOG_DISTANCE_KNOWN_INTERSECTION_AHEAD:
-                print('Position:', (x - rdata.starting_position[0], y - rdata.starting_position[1]))
-                print('Rounded position:', position)
                 print('Distance to known intersection ahead:', get_walkable_distance_to_closest_intersection_in_front_of_pos(
                     (x - rdata.starting_position[0], y - rdata.starting_position[1]),
                     get_direction(measures.compass),
@@ -290,7 +286,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=5, sample_loop: 'SampleLoop'=None):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=6, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
