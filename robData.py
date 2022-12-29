@@ -20,8 +20,9 @@ class RobData:
     intersections_intentions:   List['Intention']                   = field(default_factory=list)
     checkpoints:                Dict[int, Checkpoint]               = field(default_factory=dict)
     discontinuities:            int                                 = field(default=0)
-    stages_conditions:          List[Callable[['RobData'], bool]]   = field(default=[lambda _: False])
-    stages:                     List['Intention']                   = field(default=[None])
+    stages_conditions:          List[Callable[['RobData'], bool]]   = field(default_factory=lambda: [lambda _: False])
+    stages:                     List['Intention']                   = field(default_factory=lambda: [None])
+    previous_stage:             'Intention'                         = field(default=None)
     prepare_before_finish:      bool                                = field(default=False)
     movement_guess:             MovementData                        = field(default_factory=MovementData)
     previous_action:            Tuple[float, float]                 = field(default=(0.0, 0.0))
@@ -37,4 +38,5 @@ class RobData:
             return None
 
         self.stages_conditions.pop(0)
-        return self.stages.pop(0)
+        self.previous_stage = self.stages.pop(0)
+        return self.previous_stage

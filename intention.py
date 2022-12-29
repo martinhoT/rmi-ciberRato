@@ -193,11 +193,11 @@ class Wander(Intention):
 
             return (0.0, 0.0), TurnBack()
 
-        # When the robot data suggests that the challenge has been finished
+        # When the robot data suggests that the stage has been finished
         if rdata.finished():
             return (0.0, 0.0), rdata.next_stage()
 
-        # Line Sensors detected a discontinuity
+        # Line Sensors detected a discontinuity, likely disrupted by noise
         if self.line_sensor_discontinuity(measures.lineSensor):
             rdata.discontinuities += 1
             return (self.velocity / 5, self.velocity / 5), None
@@ -339,6 +339,12 @@ class CheckIntersectionForwardBacktrack(Intention):
 
 class TurnIntersection(Intention):
 
+    def __init__(self):
+        super().__init__()
+
+        # Whether or not the robot acted randomly in the last call. Can tell if the robot is lost
+        self.acted_randomly = False
+
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
@@ -414,6 +420,7 @@ class TurnIntersection(Intention):
         # If no path was explicitly chosen, then take a random path from the available paths (to avoid loops)
         if not next_intention:
             available = random.choice(list(intersection.get_possible_paths()))
+            self.acted_randomly = True
 
             if direction == available:
                 return None, MoveForward()
@@ -500,7 +507,7 @@ class SampleLoop(Intention):
         self.next_intention = next_intention
         self.next_intention_args = args
         self.next_intention_kwargs = kwargs
-        self.n_samples = 3
+        self.n_samples = 3   # should be odd to avoid ties
         self.n_samples_counter = 0
 
         self.lineSensor = []

@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from directions import opposite_direction
 
 from graph import Checkpoint
-from intention import Rotate, Finish, GoToStartingPosition
+from intention import Rotate, Finish, GoToStartingPosition, TurnIntersection
 from utils import get_direction, map_to_text, round_pos, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
 from robData import MovementData, RobData
 
@@ -33,7 +33,7 @@ class MyRob(CRobLinkAngs):
         self.data = RobData(
             starting_position=starting_position,
             stages_conditions=[exhausted_intersections, at_starting_position],
-            stages=[GoToStartingPosition, Finish],
+            stages=[GoToStartingPosition(), Finish()],
             movement_guess=MovementData((0, 0), starting_position, starting_angle),
             expected_noise=0.01,
         )
@@ -57,6 +57,11 @@ class MyRob(CRobLinkAngs):
     def follow_intention(self) -> bool:
         motors, next_intention = self.intention.act(self.measures, self.data)
         
+        # Determine if the robot is lost when heading to the starting position. If so, attempt to head there again
+        if isinstance(self.data.previous_stage, GoToStartingPosition) \
+                and isinstance(self.intention, TurnIntersection) and self.intention.acted_randomly:
+            motors, next_intention = self.data.previous_stage.act(self.measures, self.data)
+
         if not motors:
             motors = self.data.previous_action
         self.data.previous_action = motors
