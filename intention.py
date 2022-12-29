@@ -180,12 +180,24 @@ class Wander(Intention):
 
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
+
                 intersection = self.create_intersection(intersection_pos, rdata.intersections)
 
-                intersection.add_path(opposite_direction(direction))
-                rdata.previous_intersection = intersection
+                if rdata.previous_intersection:
 
-                self.update_neighbours(intersection, rdata)
+                    intersection.add_visited_path(opposite_direction(direction))
+
+                    # It's possible if finding dead-ends
+                    if rdata.previous_intersection != intersection:
+                        rdata.previous_intersection.add_visited_path(direction)
+
+                    self.update_neighbours(intersection, rdata)
+
+                else:
+
+                    intersection.add_path(opposite_direction(direction))
+                    
+                rdata.previous_intersection = intersection
 
             return (0.0, 0.0), TurnBack()
 
@@ -203,18 +215,21 @@ class Wander(Intention):
             checkpoint_pos = round_pos_to_intersection(x, y, rdata.starting_position, direction)
             checkpoint = Checkpoint(checkpoint_pos[0], checkpoint_pos[1], measures.ground)
             rdata.checkpoints[measures.ground] = checkpoint
-            
+     
         # Possible intersection found
         if self.check_if_intersection(measures.lineSensor):
 
             # Adjust position to the closest possible intersection
             intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, direction)
 
-            # If the intersection is not in the map, add it
-            if intersection_pos not in rdata.intersections:
-                self.create_intersection(intersection_pos, rdata.intersections)
+            # Don't check for new intersections if the robot already has a path to follow
+            if not rdata.intersections_intentions:
 
-                return (0.0, 0.0), CheckIntersectionForward(intersection_pos)
+                # If the intersection is not in the map, add it
+                if intersection_pos not in rdata.intersections:
+                    self.create_intersection(intersection_pos, rdata.intersections)
+
+                    return (0.0, 0.0), SampleLoop(CheckIntersectionForward, intersection_pos)
 
             return None, TurnIntersection()
             
@@ -255,11 +270,13 @@ class Wander(Intention):
 
 class CheckIntersectionForward(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], test_steps: int=7):
+    def __init__(self, intersection_pos: Tuple[int, int], test_steps: int=7, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.intersection_pos = intersection_pos
         self.test_steps = test_steps
         self.found_directions = set()
+
+        self.sample_loop = sample_loop
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
@@ -267,11 +284,34 @@ class CheckIntersectionForward(Intention):
         direction = get_direction(measures.compass)
         next_intention = None
 
-        if all(ls == '1' for ls in measures.lineSensor[:2]):
-            self.found_directions.add(left_direction(direction))
+        if self.sample_loop:
+            
+            if all(ls == '1' for ls in self.sample_loop.lineSensor[:3]):
+                self.found_directions.add(left_direction(direction))
 
-        if all(ls == '1' for ls in measures.lineSensor[5:]):
-            self.found_directions.add(right_direction(direction))
+            if all(ls == '1' for ls in self.sample_loop.lineSensor[4:]):
+                self.found_directions.add(right_direction(direction))
+
+            # Intersection doesn't exist (noise)
+            if not all(ls == '1' for ls in self.sample_loop.lineSensor[:3]) and \
+                not all(ls == '1' for ls in self.sample_loop.lineSensor[4:]):
+
+                (x, y), _ = self.obtain_position(measures, rdata)
+                direction = get_direction(measures.compass)
+
+                intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
+                if intersection in rdata.intersections:
+                    rdata.intersections.pop(intersection)
+
+                return (self.velocity, self.velocity), Wander()
+
+        else:
+
+            if all(ls == '1' for ls in measures.lineSensor[:2]):
+                self.found_directions.add(left_direction(direction))
+
+            if all(ls == '1' for ls in measures.lineSensor[5:]):
+                self.found_directions.add(right_direction(direction))
 
         if measures.lineSensor.count('0') >= 6:
             next_intention = CheckIntersectionForwardBacktrack(self.intersection_pos, self.found_directions)
@@ -314,12 +354,6 @@ class CheckIntersectionForwardBacktrack(Intention):
 
         # If the robot is back at the intersection
         if self.steps == self.max_steps:
-            
-            # TODO: temporary fix that may not be needed when doing SampleLoop before CheckIntersectionForward
-            # Redundant intersection (only move forward). Remove since it affects the speed up calculation
-            if left_direction(direction) not in self.found_directions and right_direction(direction) not in self.found_directions:
-                rdata.intersections.pop(intersection)
-                return (self.velocity, self.velocity), Wander()
 
             for found_direction in self.found_directions:
                 rdata.intersections[intersection].add_path( found_direction )
@@ -358,6 +392,10 @@ class TurnIntersection(Intention):
                 rdata.previous_intersection.add_visited_path(direction)
 
         self.update_neighbours(intersection, rdata)
+
+        # When the robot data suggests that the challenge has been finished
+        if rdata.finished():
+            return (0.0, 0.0), Wander()
 
         next_intention = None
 
