@@ -20,12 +20,21 @@ class RobData:
     intersections_intentions:   List['Intention']                   = field(default_factory=list)
     checkpoints:                Dict[int, Checkpoint]               = field(default_factory=dict)
     discontinuities:            int                                 = field(default=0)
-    finish_condition:           Callable[['RobData'], bool]         = field(default=lambda _: False)
+    stages_conditions:          List[Callable[['RobData'], bool]]   = field(default=[lambda _: False])
+    stages:                     List['Intention']                   = field(default=[None])
     prepare_before_finish:      bool                                = field(default=False)
     movement_guess:             MovementData                        = field(default_factory=MovementData)
     previous_action:            Tuple[float, float]                 = field(default=(0.0, 0.0))
     expected_noise:             float                               = field(default=0.0)
 
     def finished(self) -> bool:
-        """When the robot data suggests that the challenge has been finished. Dependent on the provided finish condition."""
-        return self.finish_condition(self)
+        """When the robot data suggests that the challenge has been finished. Dependent on the provided stage conditions."""
+        return self.stages_conditions[0](self) if self.stages_conditions else True
+    
+    def next_stage(self) -> 'Intention':
+        """Pass on to the next stage, returning the intention to which the robot should transition."""
+        if not self.stages_conditions or not self.stages:
+            return None
+
+        self.stages_conditions.pop(0)
+        return self.stages.pop(0)

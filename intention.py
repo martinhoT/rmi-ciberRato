@@ -195,7 +195,7 @@ class Wander(Intention):
 
         # When the robot data suggests that the challenge has been finished
         if rdata.finished():
-            return (0.0, 0.0), (PrepareFinish() if rdata.prepare_before_finish else Finish())
+            return (0.0, 0.0), rdata.next_stage()
 
         # Line Sensors detected a discontinuity
         if self.line_sensor_discontinuity(measures.lineSensor):
@@ -522,19 +522,11 @@ class SampleLoop(Intention):
         return (0.0, 0.0), self.next_intention(*self.next_intention_args, **self.next_intention_kwargs, sample_loop=self)
 
 
-class PrepareFinish(Intention):
+class GoToStartingPosition(Intention):
 
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
-        def at_starting_position(rdata: RobData):
-            position_unsnapped = rdata.movement_guess.coordinates
-            position = round_pos(*position_unsnapped, rdata.starting_position)
-            return position == rdata.starting_position
-        
-        rdata.finish_condition = at_starting_position
-        rdata.prepare_before_finish = False
-        
         (x, y), position = self.obtain_position(measures, rdata)
         
         direction = get_direction(measures.compass)
@@ -542,6 +534,7 @@ class PrepareFinish(Intention):
         current_intersection = rdata.intersections[current_intersection_pos]
 
         # Calculate route to the starting position
+        update_checkpoints_neighbours(rdata)
         next_intention = self.set_route_to(
             key=lambda n: isinstance(n, Checkpoint) and n.get_coordinates() == rdata.starting_position,
             direction=get_direction(measures.compass),

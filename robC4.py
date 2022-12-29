@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 from directions import opposite_direction
 
 from graph import Checkpoint
-from intention import Rotate, Finish, PrepareFinish
-from utils import get_direction, map_to_text, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
+from intention import Rotate, Finish, GoToStartingPosition
+from utils import get_direction, map_to_text, round_pos, wavefront_expansion, calculate_next_movement, update_checkpoints_neighbours
 from robData import MovementData, RobData
 
 CELLROWS=7
@@ -22,13 +22,18 @@ class MyRob(CRobLinkAngs):
                 and all(len(i.get_possible_paths() - i.get_visited_paths()) == 0 for i in rdata.intersections.values()) \
                 and len(rdata.intersections_intentions) == 0
         
+        def at_starting_position(rdata: RobData):
+            position_unsnapped = rdata.movement_guess.coordinates
+            position = round_pos(*position_unsnapped, rdata.starting_position)
+            return position == rdata.starting_position
+
         starting_position = (0, 0)
         # We assume the robot is always facing east
         starting_angle = 0.0
         self.data = RobData(
             starting_position=starting_position,
-            finish_condition=exhausted_intersections,
-            prepare_before_finish=True,
+            stages_conditions=[exhausted_intersections, at_starting_position],
+            stages=[GoToStartingPosition, Finish],
             movement_guess=MovementData((0, 0), starting_position, starting_angle),
             expected_noise=0.01,
         )
@@ -57,9 +62,6 @@ class MyRob(CRobLinkAngs):
         self.data.previous_action = motors
         self.data.movement_guess = calculate_next_movement(motors, self.data.movement_guess)
         self.driveMotors(*motors)
-
-        if isinstance(next_intention, PrepareFinish):
-            update_checkpoints_neighbours(self.data)
 
         if isinstance(self.intention, Finish):
             return True

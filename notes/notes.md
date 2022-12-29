@@ -56,7 +56,7 @@ Map:
 ✓ `intention`: the distance to the known intersection ahead is not correct
 ✓ `intention`: there is an inconsitency with which values of the `lineSensor` are evaluated in `CheckIntersectionForwardBacktrack`
 ✓ `intention`: the speed up function is not the best (speed up beyond `0.15` doesn't work in practice, heavily braking when not needed)
-- `intention`: path calculation to finish may happen 1 intersection later
+- `intention`: allow the robot to recalculate the PrepareFinish path if it somehow is finished prematurely
 - Prioritize heading into directions that are closer to the map's borders
 
 ### Refactoring
