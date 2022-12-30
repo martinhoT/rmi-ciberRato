@@ -164,7 +164,11 @@ def get_distance_to_closest_intersection_in_front_of_pos(
     }[direction]
 
     distance_of_intersections_in_front_of_me = [
-        distance for distance in map(intersection_in_front_distance, intersections) if distance > 0]
+        (distance, intersection) 
+        for distance, intersection 
+        in zip(map(intersection_in_front_distance, intersections), intersections)
+        if distance > 0
+    ]
 
     return min(distance_of_intersections_in_front_of_me, default=None)
 
@@ -174,15 +178,16 @@ def get_walkable_distance_to_closest_intersection_in_front_of_pos(
         direction: Direction,
         intersections: Iterable[Tuple[int, int]],
         pmap: List[Tuple[int, int]],
-        rounded_position: Tuple[int, int]=None) -> float:
+        rounded_position: Tuple[int, int]=None) -> Tuple[float, Tuple[int, int]]:
 
     if not rounded_position:
         rounded_position = position
 
-    closest_distance = get_distance_to_closest_intersection_in_front_of_pos(
+    closest = get_distance_to_closest_intersection_in_front_of_pos(
         position, direction, intersections, rounded_position)
     
-    if closest_distance:
+    if closest:
+        closest_distance, closest_intersection = closest
 
         intersection_step = {
             Direction.E: lambda i, n: (i[0] + n, i[1]),
@@ -195,7 +200,7 @@ def get_walkable_distance_to_closest_intersection_in_front_of_pos(
         
         # Should reach that intersection in a known straight path from this position
         if len(positions_to_be_covered - set(pmap)) == 0:
-            return closest_distance
+            return closest_distance, closest_intersection
     
     return None
 
@@ -218,7 +223,7 @@ def estimate_pos(x: float, y: float, compass: float, starting_position: Tuple[fl
     if direction == Direction.N or direction == Direction.S:
         return round((x-starting_position[0])/2)*2, y
 
-    # If the robot is facing north or south, y is rounded to the nearest even number
+    # If the robot is facing east or west, y is rounded to the nearest even number
     elif direction == Direction.E or direction == Direction.W:
         return x, round((y-starting_position[1])/2)*2
 
