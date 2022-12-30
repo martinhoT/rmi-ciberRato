@@ -161,6 +161,11 @@ class Intention:
 
 class Wander(Intention):
 
+    def __init__(self, sample_loop: 'SampleLoop'=None):
+        super().__init__()
+
+        self.sample_loop = sample_loop
+
     def act(self, measures: CMeasures, rdata: RobData) -> Tuple[Tuple[float, float], 'Intention']:
         self.log_measured(measures, rdata)
 
@@ -174,10 +179,14 @@ class Wander(Intention):
 
         direction = get_direction(measures.compass)
 
-        # Robot is off track, add dead end to intersections
+        # Robot is possibly off track or found a dead end
         n_active = measures.lineSensor.count("1")
-        if (n_active == 0):
+        if n_active == 0 and not self.sample_loop:
+            return (self.velocity, self.velocity), SampleLoop(Wander)
 
+        # Robot is off track, add dead end to intersections
+        if self.sample_loop and self.sample_loop.lineSensor.count("1") == 0:
+            
             # Adjust position to the closest possible intersection
             intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, None)
 
@@ -234,7 +243,9 @@ class Wander(Intention):
 
                     return (0.0, 0.0), SampleLoop(CheckIntersectionForward, intersection_pos)
 
-            return None, TurnIntersection()
+            # If robot has a path to follow and the intersection exists
+            if intersection_pos in rdata.intersections:
+                return None, TurnIntersection()
             
         velocity_modifier = 1
         if SPEED_OPTIMIZATIONS:
@@ -251,7 +262,7 @@ class Wander(Intention):
                 velocity_modifier = self.speed_up_func(closest_distance, max_speed, self.velocity, slow_down_portion)
 
         action = self.follow_path(measures)
-        return (action[0]*velocity_modifier, action[1]*velocity_modifier), None
+        return (action[0]*velocity_modifier, action[1]*velocity_modifier), Wander()
     
     def create_intersection(self, intersection_pos: Tuple[int, int],
             intersection_list: Dict[Tuple[int, int], Intersection]) -> Intersection:
