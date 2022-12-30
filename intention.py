@@ -155,7 +155,7 @@ class Intention:
         if path_to_closest:
             path, _ = path_to_closest
             rdata.intersections_intentions = self.calculate_moves(direction, path)
-            rdata.path = path[1:]
+            rdata.path = path
 
     def __str__(self): return self.__class__.__name__
     def __repr__(self): return str(self)
@@ -423,7 +423,7 @@ class TurnIntersection(Intention):
         next_intention = None
 
         # If there are pre-calculated intentions, follow them
-        if rdata.intersections_intentions:
+        if rdata.intersections_intentions and intersection.get_x() == rdata.path[0].get_x() and intersection.get_y() == rdata.path[0].get_y():
             rdata.path.pop(0)
             next_intention = rdata.intersections_intentions.pop(0)
         
@@ -465,6 +465,7 @@ class TurnIntersection(Intention):
                 )
                 # It can be empty if the path leads nowhere
                 if rdata.intersections_intentions:
+                    rdata.path.pop(0)
                     next_intention = rdata.intersections_intentions.pop(0)
             
             # If there are non-visited paths to take
