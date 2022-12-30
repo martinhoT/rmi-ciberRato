@@ -369,7 +369,7 @@ class CheckIntersectionForwardBacktrack(Intention):
         intersection = round_pos_to_intersection(x, y, rdata.starting_position, None)
 
         # If the robot is back at the intersection
-        if self.steps == self.max_steps:
+        if self.steps == self.max_steps and intersection in rdata.intersections:
 
             for found_direction in self.found_directions:
                 rdata.intersections[intersection].add_path( found_direction )
