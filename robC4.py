@@ -140,6 +140,8 @@ class MyRob(CRobLinkAngs):
         # List to keep track of all possible paths
         all_path_positions = []
 
+        update_checkpoints_neighbours(self.data)
+
         for sequence in itertools.permutations(checkpoints[1:]):
             sequence = [checkpoints[0]] + list(sequence) + [checkpoints[0]]
 

@@ -10,7 +10,7 @@ from directions import Direction, left_direction, opposite_direction, right_dire
 from utils import *
 
 
-LOG = True
+LOG = False
 LOG_CLEAR = True
 LOG_STARTING_POS = False
 LOG_INTENTION = True
@@ -25,7 +25,7 @@ LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
 MAX_SPEED = 0.15
-SLOW_DOWN_PORTION = (1.0, 1.5)
+SLOW_DOWN_PORTION = (1.5, 2.0)
 
 class Intention:
 

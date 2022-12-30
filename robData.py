@@ -23,7 +23,6 @@ class RobData:
     stages_conditions:          List[Callable[['RobData'], bool]]   = field(default_factory=lambda: [lambda _: False])
     stages:                     List['Intention']                   = field(default_factory=lambda: [None])
     previous_stage:             'Intention'                         = field(default=None)
-    prepare_before_finish:      bool                                = field(default=False)
     movement_guess:             MovementData                        = field(default_factory=MovementData)
     previous_action:            Tuple[float, float]                 = field(default=(0.0, 0.0))
     expected_noise:             float                               = field(default=0.0)
