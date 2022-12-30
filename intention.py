@@ -24,6 +24,8 @@ LOG_MOVEMENT_GUESS = True
 LOG_MAP = True
 
 SPEED_OPTIMIZATIONS = True
+MAX_SPEED = 0.15
+SLOW_DOWN_PORTION = (1.0, 1.5)
 
 class Intention:
 
@@ -188,7 +190,7 @@ class Wander(Intention):
         if self.sample_loop and self.sample_loop.lineSensor.count("1") == 0:
             
             # Adjust position to the closest possible intersection
-            intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, None)
+            intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position)
 
             # If the intersection is not in the map, add it
             if intersection_pos not in rdata.intersections:
@@ -224,7 +226,7 @@ class Wander(Intention):
 
         # Save checkpoint if one was found
         if (measures.ground != -1) and measures.ground not in rdata.checkpoints:
-            checkpoint_pos = round_pos_to_intersection(x, y, rdata.starting_position, None)
+            checkpoint_pos = round_pos_to_intersection(x, y, rdata.starting_position)
             checkpoint = Checkpoint(checkpoint_pos[0], checkpoint_pos[1], measures.ground)
             rdata.checkpoints[measures.ground] = checkpoint
      
@@ -232,7 +234,8 @@ class Wander(Intention):
         if self.check_if_intersection(measures.lineSensor):
 
             # Adjust position to the closest possible intersection
-            intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, direction)
+            line_sensor_x, line_sensor_y = get_line_sensor_pos(x, y, direction)
+            intersection_pos = round_pos_to_intersection(line_sensor_x, line_sensor_y, rdata.starting_position)
 
             # Don't check for new intersections if the robot already has a path to follow
             if not rdata.intersections_intentions:
@@ -256,10 +259,7 @@ class Wander(Intention):
             if closest:
                 closest_distance = closest[0]
 
-                max_speed = 0.15
-                slow_down_portion = (1.5, 2.0)
-
-                velocity_modifier = self.speed_up_func(closest_distance, max_speed, self.velocity, slow_down_portion)
+                velocity_modifier = self.speed_up_func(closest_distance, MAX_SPEED, self.velocity, SLOW_DOWN_PORTION)
 
         action = self.follow_path(measures)
         return (action[0]*velocity_modifier, action[1]*velocity_modifier), Wander()
@@ -315,7 +315,8 @@ class CheckIntersectionForward(Intention):
                 (x, y), _ = self.obtain_position(measures, rdata)
                 direction = get_direction(measures.compass)
 
-                intersection = round_pos_to_intersection(x, y, rdata.starting_position, direction)
+                line_sensor_x, line_sensor_y = get_line_sensor_pos(x, y, direction)
+                intersection = round_pos_to_intersection(line_sensor_x, line_sensor_y, rdata.starting_position)
                 if intersection in rdata.intersections:
                     rdata.intersections.pop(intersection)
 
@@ -342,7 +343,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=5, sample_loop: 'SampleLoop'=None):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=10, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
@@ -366,17 +367,22 @@ class CheckIntersectionForwardBacktrack(Intention):
         if not measures.gpsReady:
             rdata.movement_guess.coordinates = (x, y)
 
-        intersection = round_pos_to_intersection(x, y, rdata.starting_position, None)
+        line_sensor_pos = get_line_sensor_pos(x, y, direction)
+        rounded_line_sensor_pos = round_pos(line_sensor_pos[0], line_sensor_pos[1], rdata.starting_position)
+        closest = get_walkable_distance_to_closest_intersection_in_front_of_pos(
+            position=line_sensor_pos, direction=direction, intersections=rdata.intersections.keys(), pmap=rdata.pmap, rounded_position=rounded_line_sensor_pos
+        )
+        intersection_in_front = closest[1] if closest is not None else None
 
         # If the robot is back at the intersection
-        if self.steps == self.max_steps and intersection in rdata.intersections:
+        if self.steps == self.max_steps or intersection_in_front == self.intersection_pos:
 
             for found_direction in self.found_directions:
-                rdata.intersections[intersection].add_path( found_direction )
+                rdata.intersections[self.intersection_pos].add_path( found_direction )
                 
-            rdata.intersections[intersection].add_path( opposite_direction(direction) )
+            rdata.intersections[self.intersection_pos].add_path( opposite_direction(direction) )
             
-            return (self.velocity, self.velocity), TurnIntersection()
+            return (0.0, 0.0), TurnIntersection() if intersection_in_front == self.intersection_pos else Wander()
 
         self.steps += 1
 
@@ -397,7 +403,8 @@ class TurnIntersection(Intention):
         (x, y), _ = self.obtain_position(measures, rdata)
         direction = get_direction(measures.compass)
 
-        intersection_pos = round_pos_to_intersection(x, y, rdata.starting_position, direction)
+        line_sensor_x, line_sensor_y = get_line_sensor_pos(x, y, direction)
+        intersection_pos = round_pos_to_intersection(line_sensor_x, line_sensor_y, rdata.starting_position)
         direction = get_direction(measures.compass)
         intersection = rdata.intersections[intersection_pos]
 
@@ -489,7 +496,7 @@ class TurnIntersection(Intention):
 
 class Rotate(Intention):
 
-    def __init__(self, starting_direction: Direction, end_direction: Direction, advancement_steps: int=3):
+    def __init__(self, starting_direction: Direction, end_direction: Direction, advancement_steps: int=4):
         super().__init__()
 
         self.end_direction = end_direction
