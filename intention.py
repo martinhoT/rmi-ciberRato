@@ -326,7 +326,7 @@ class CheckIntersectionForward(Intention):
 
 class CheckIntersectionForwardBacktrack(Intention):
 
-    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=6, sample_loop: 'SampleLoop'=None):
+    def __init__(self, intersection_pos: Tuple[int, int], found_directions: Set[Direction], max_steps: int=5, sample_loop: 'SampleLoop'=None):
         super().__init__()
         self.steps = 0
         # NOTE: the maximum number of steps should not be too large. The robot should not leave the intersection, or else it will be lost
